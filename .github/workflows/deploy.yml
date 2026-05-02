@@ -2,44 +2,115 @@ name: Build Cora Sager Net+
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+    inputs:
+      version_name:
+        description: 'Version Name (e.g. 1.0.0)'
+        required: false
+        default: '1.0.0'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout SagerNet Source
+        uses: actions/checkout@v3
         with:
+          repository: SagerNet/SagerNet
+          ref: main
+          path: sagernet
           submodules: recursive
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
           java-version: '17'
+          distribution: 'temurin'
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v2
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Grant Gradle Execute Permission
+        run: chmod +x sagernet/gradlew
 
-      - name: Build APK
-        run: ./gradlew :app:assembleRelease --no-daemon -Pandroid.injected.signing.store.file=release.keystore -Pandroid.injected.signing.store.password=android -Pandroid.injected.signing.key.alias=androiddebugkey -Pandroid.injected.signing.key.password=android
+      - name: Apply App Name Patch
+        run: |
+          cd sagernet
+          find . -name "strings.xml" | xargs sed -i 's/SagerNet/Cora Sager Net+/g'
+          find . -name "*.gradle" -o -name "*.gradle.kts" | xargs grep -l "applicationId" | xargs sed -i 's/io.nekohasekai.sagernet/com.cora.sagernet/g' || true
+          find . -name "AndroidManifest.xml" | xargs sed -i 's/SagerNet/Cora Sager Net+/g' || true
+
+      - name: Inject Config Decryption Code
+        run: |
+          cat > sagernet/app/src/main/kotlin/com/cora/sagernet/CoraDecryptor.kt << 'KOTLIN_EOF'
+          package com.cora.sagernet
+
+          import android.util.Base64
+          import javax.crypto.Cipher
+          import javax.crypto.spec.IvParameterSpec
+          import javax.crypto.spec.SecretKeySpec
+
+          object CoraDecryptor {
+              private const val SECRET_KEY = "${{ secrets.CORA_SECRET_KEY }}"
+              private const val ALGORITHM = "AES/CBC/PKCS5Padding"
+              private const val CORA_MAGIC = "CORA:"
+
+              fun isCoraEncrypted(data: String): Boolean {
+                  return data.trimStart().startsWith(CORA_MAGIC)
+              }
+
+              fun decrypt(encryptedData: String): String {
+                  return try {
+                      val payload = encryptedData.removePrefix(CORA_MAGIC)
+                      val decoded = Base64.decode(payload, Base64.DEFAULT)
+                      val iv = decoded.copyOfRange(0, 16)
+                      val cipherText = decoded.copyOfRange(16, decoded.size)
+                      val keyBytes = SECRET_KEY.toByteArray(Charsets.UTF_8).copyOf(32)
+                      val secretKeySpec = SecretKeySpec(keyBytes, "AES")
+                      val ivSpec = IvParameterSpec(iv)
+                      val cipher = Cipher.getInstance(ALGORITHM)
+                      cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivSpec)
+                      String(cipher.doFinal(cipherText), Charsets.UTF_8)
+                  } catch (e: Exception) {
+                      throw IllegalArgumentException("فشل فك التشفير: ملف الإعداد غير صالح أو مفتاح خاطئ", e)
+                  }
+              }
+          }
+          KOTLIN_EOF
+
+      - name: Build Release APK
+        run: |
+          cd sagernet
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/keystore.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
+            --stacktrace || ./gradlew assembleDebug --stacktrace
         env:
-          BUILD_PLUGIN: none
+          GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cora-sager-net-plus-apk
-          path: app/build/outputs/apk/release/*.apk
+      - name: Find APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find sagernet -name "*.apk" | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+
+      - name: Send APK to Telegram
+        if: steps.find_apk.outputs.apk_path != ''
+        run: |
+          APK_PATH="${{ steps.find_apk.outputs.apk_path }}"
+          CAPTION="✅ Cora Sager Net+ Build Completed%0AVersion: ${{ github.event.inputs.version_name }}%0ABranch: ${{ github.ref_name }}%0ACommit: ${{ github.sha }}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_APK_BOT_TOKEN }}/sendDocument" \
+            -F "chat_id=${{ secrets.TELEGRAM_APK_CHAT_ID }}" \
+            -F "document=@$APK_PATH" \
+            -F "caption=$CAPTION"
+
+      - name: Notify Admin on Failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_APK_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_APK_CHAT_ID }}" \
+            -d "text=❌ فشل بناء Cora Sager Net+%0AWorkflow: ${{ github.run_id }}%0ACheck: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
