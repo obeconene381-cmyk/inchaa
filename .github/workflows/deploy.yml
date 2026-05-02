@@ -45,7 +45,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('sagernet/**/*.gradle*', 'sagernet/**/gradle-wrapper.properties') }}
+          key: gradle-${{ hashFiles('sagernet/**/*.gradle*') }}
           restore-keys: gradle-
 
       - name: Grant Gradle Execute Permission
@@ -55,57 +55,63 @@ jobs:
         run: |
           cd sagernet
           find . -name "strings.xml" | xargs grep -l "SagerNet" | xargs sed -i 's/>SagerNet</>Cora Sager Net+</g' || true
-          find . -name "*.gradle" -o -name "*.gradle.kts" | xargs grep -l "applicationId" 2>/dev/null | xargs sed -i 's/io\.nekohasekai\.sagernet/com.cora.sagernet/g' || true
+          find . \( -name "*.gradle" -o -name "*.gradle.kts" \) | xargs grep -l "applicationId" 2>/dev/null | xargs sed -i 's/io\.nekohasekai\.sagernet/com.cora.sagernet/g' || true
 
-      - name: Inject Config Decryption Code
+      - name: Inject CoraDecryptor
+        env:
+          CORA_SECRET: ${{ secrets.CORA_SECRET_KEY }}
         run: |
           mkdir -p sagernet/app/src/main/kotlin/com/cora/sagernet
-          SECRET="${{ secrets.CORA_SECRET_KEY }}"
-          cat > sagernet/app/src/main/kotlin/com/cora/sagernet/CoraDecryptor.kt << KOTLIN_EOF
-          package com.cora.sagernet
+          python3 - <<'PYEOF'
+import os
+secret = os.environ.get("CORA_SECRET", "default_key_change_me_32chars!!")
+code = f'''package com.cora.sagernet
 
-          import android.util.Base64
-          import javax.crypto.Cipher
-          import javax.crypto.spec.IvParameterSpec
-          import javax.crypto.spec.SecretKeySpec
+import android.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
-          object CoraDecryptor {
-              private const val SECRET_KEY = "${SECRET}"
-              private const val ALGORITHM = "AES/CBC/PKCS5Padding"
-              private const val CORA_MAGIC = "CORA:"
+object CoraDecryptor {{
+    private const val SECRET_KEY = "{secret}"
+    private const val ALGORITHM = "AES/CBC/PKCS5Padding"
+    private const val CORA_MAGIC = "CORA:"
 
-              fun isCoraEncrypted(data: String): Boolean =
-                  data.trimStart().startsWith(CORA_MAGIC)
+    fun isCoraEncrypted(data: String): Boolean =
+        data.trimStart().startsWith(CORA_MAGIC)
 
-              fun decrypt(encryptedData: String): String {
-                  if (!isCoraEncrypted(encryptedData))
-                      throw IllegalArgumentException("الملف ليس بصيغة Cora المشفرة.")
-                  return try {
-                      val payload = encryptedData.removePrefix(CORA_MAGIC).trim()
-                      val decoded = Base64.decode(payload, Base64.DEFAULT)
-                      val iv = decoded.copyOfRange(0, 16)
-                      val ct = decoded.copyOfRange(16, decoded.size)
-                      val key = SECRET_KEY.toByteArray(Charsets.UTF_8).copyOf(32)
-                      val cipher = Cipher.getInstance(ALGORITHM)
-                      cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
-                      String(cipher.doFinal(ct), Charsets.UTF_8)
-                  } catch (e: Exception) {
-                      throw IllegalArgumentException("فشل فك التشفير: ملف غير صالح.", e)
-                  }
-              }
-          }
-          KOTLIN_EOF
+    fun decrypt(encryptedData: String): String {{
+        if (!isCoraEncrypted(encryptedData))
+            throw IllegalArgumentException("ملف غير صالح.")
+        return try {{
+            val payload = encryptedData.removePrefix(CORA_MAGIC).trim()
+            val decoded = Base64.decode(payload, Base64.DEFAULT)
+            val iv = decoded.copyOfRange(0, 16)
+            val ct = decoded.copyOfRange(16, decoded.size)
+            val key = SECRET_KEY.toByteArray(Charsets.UTF_8).copyOf(32)
+            val cipher = Cipher.getInstance(ALGORITHM)
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+            String(cipher.doFinal(ct), Charsets.UTF_8)
+        }} catch (e: Exception) {{
+            throw IllegalArgumentException("فشل فك التشفير.", e)
+        }}
+    }}
+}}
+'''
+with open("sagernet/app/src/main/kotlin/com/cora/sagernet/CoraDecryptor.kt", "w") as f:
+    f.write(code)
+print("CoraDecryptor.kt injected successfully")
+PYEOF
 
       - name: Build APK
         run: |
           cd sagernet
           ./gradlew :app:assembleOssDebug \
             --no-daemon \
-            --stacktrace \
-            -Dfile.encoding=UTF-8
+            --warning-mode all \
+            -Dfile.encoding=UTF-8 2>&1 | tail -100
         env:
-          GRADLE_OPTS: "-Xmx4g -Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          GRADLE_OPTS: "-Xmx6g -Dorg.gradle.jvmargs=-Xmx6g"
 
       - name: Find APK
         id: find_apk
