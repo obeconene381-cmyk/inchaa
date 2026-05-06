@@ -1,137 +1,49 @@
-name: Build Cora Sager Net+
+name: Auto VLESS Deploy (with Cloudflare)
 
 on:
   workflow_dispatch:
     inputs:
-      version_name:
-        description: 'Version Name (e.g. 1.0.0)'
-        required: false
-        default: '1.0.0'
+      lab_url:
+        description: 'Qwiklabs URL'
+        required: true
+        type: string
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+        type: string
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 15 # ⏱️ إيقاف إجباري بعد 15 دقيقة
 
     steps:
-      - name: Checkout SagerNet Source
-        uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          repository: SagerNet/SagerNet
-          ref: dev
-          path: sagernet
-          submodules: recursive
-          fetch-depth: 0
+          python-version: '3.10'
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v3
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.20'
-
-      - name: Set up Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r25c
-
-      - name: Cache Gradle
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('sagernet/**/*.gradle*') }}
-          restore-keys: gradle-
-
-      - name: Grant Gradle Execute Permission
-        run: chmod +x sagernet/gradlew
-
-      - name: Apply App Name Patch
+      - name: Install Requirements
         run: |
-          cd sagernet
-          find . -name "strings.xml" | xargs grep -l "SagerNet" | xargs sed -i 's/>SagerNet</>Cora Sager Net+</g' || true
-          find . \( -name "*.gradle" -o -name "*.gradle.kts" \) | xargs grep -l "applicationId" 2>/dev/null | xargs sed -i 's/io\.nekohasekai\.sagernet/com.cora.sagernet/g' || true
+          python -m pip install --upgrade pip
+          pip install playwright requests
+          playwright install chromium --with-deps
 
-      - name: Inject CoraDecryptor
+      - name: Run Playwright Script
         env:
-          CORA_SECRET: ${{ secrets.CORA_SECRET_KEY }}
-        run: |
-          mkdir -p sagernet/app/src/main/kotlin/com/cora/sagernet
-          python3 - <<'PYEOF'
-import os
-secret = os.environ.get("CORA_SECRET", "default_key_change_me_32chars!!")
-code = f'''package com.cora.sagernet
+          # المتغيرات القديمة تاعك
+          LAB_URL: ${{ github.event.inputs.lab_url }}
+          TELEGRAM_CHAT_ID: ${{ github.event.inputs.chat_id }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_ID: ${{ secrets.ADMIN_ID }}
+          LOG_BOT_TOKEN: ${{ secrets.LOG_BOT_TOKEN }}
+          
+          # 🆕 المتغيرات الجديدة تاع كلودفلير (زدناهم هنا)
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
-import android.util.Base64
-import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
-
-object CoraDecryptor {{
-    private const val SECRET_KEY = "{secret}"
-    private const val ALGORITHM = "AES/CBC/PKCS5Padding"
-    private const val CORA_MAGIC = "CORA:"
-
-    fun isCoraEncrypted(data: String): Boolean =
-        data.trimStart().startsWith(CORA_MAGIC)
-
-    fun decrypt(encryptedData: String): String {{
-        if (!isCoraEncrypted(encryptedData))
-            throw IllegalArgumentException("ملف غير صالح.")
-        return try {{
-            val payload = encryptedData.removePrefix(CORA_MAGIC).trim()
-            val decoded = Base64.decode(payload, Base64.DEFAULT)
-            val iv = decoded.copyOfRange(0, 16)
-            val ct = decoded.copyOfRange(16, decoded.size)
-            val key = SECRET_KEY.toByteArray(Charsets.UTF_8).copyOf(32)
-            val cipher = Cipher.getInstance(ALGORITHM)
-            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
-            String(cipher.doFinal(ct), Charsets.UTF_8)
-        }} catch (e: Exception) {{
-            throw IllegalArgumentException("فشل فك التشفير.", e)
-        }}
-    }}
-}}
-'''
-with open("sagernet/app/src/main/kotlin/com/cora/sagernet/CoraDecryptor.kt", "w") as f:
-    f.write(code)
-print("CoraDecryptor.kt injected successfully")
-PYEOF
-
-      - name: Build APK
-        run: |
-          cd sagernet
-          ./gradlew :app:assembleOssDebug \
-            --no-daemon \
-            --warning-mode all \
-            -Dfile.encoding=UTF-8 2>&1 | tail -100
-        env:
-          GRADLE_OPTS: "-Xmx6g -Dorg.gradle.jvmargs=-Xmx6g"
-
-      - name: Find APK
-        id: find_apk
-        run: |
-          APK_PATH=$(find sagernet -name "*.apk" | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found: $APK_PATH"
-
-      - name: Send APK to Telegram
-        if: steps.find_apk.outputs.apk_path != ''
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_APK_BOT_TOKEN }}/sendDocument" \
-            -F "chat_id=${{ secrets.TELEGRAM_APK_CHAT_ID }}" \
-            -F "document=@${{ steps.find_apk.outputs.apk_path }}" \
-            -F "caption=✅ Cora Sager Net+ v${{ github.event.inputs.version_name }} جاهز"
-
-      - name: Notify on Failure
-        if: failure()
-        run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_APK_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_APK_CHAT_ID }}" \
-            -d "text=❌ فشل البناء%0A$RUN_URL"
+        run: python main.py
