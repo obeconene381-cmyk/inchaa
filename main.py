@@ -1,91 +1,321 @@
+import asyncio
+import re
+import os
 import requests
-import json
-import sys
+from playwright.async_api import async_playwright
 
-GITHUB_TOKEN = "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"
-GITHUB_USER = "obeconene381-cmyk"
-GITHUB_REPO = "inchaa"
-WORKFLOW_FILE = "deploy.yml"
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN") 
+LOG_CHANNEL_ID = "-1003781090454"
 
-HEADERS = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28"
-}
+ERROR_INDICATORS = [
+    "error:", "invalid value for [--region]", "permission_denied",
+    "quota exceeded", "quota limit", "unavailable", "failed to create service",
+    "organization policy", "resourcelocations violated", 
+    "constraint constraints/gcp.resourcelocations", "deployment failed", 
+    "badrequest", "failed_precondition"
+]
 
+def send_telegram_msg(chat_id, text):
+    if BOT_TOKEN and chat_id:
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
 
-def trigger_build(version_name: str = "1.0.0") -> dict:
-    url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/actions/workflows/{WORKFLOW_FILE}/dispatches"
-    payload = {
-        "ref": "main",
-        "inputs": {
-            "version_name": version_name
-        }
-    }
-    response = requests.post(url, headers=HEADERS, json=payload)
-    if response.status_code == 204:
-        print(f"✅ تم تشغيل البناء بنجاح! الإصدار: {version_name}")
-        return {"success": True, "version": version_name}
-    else:
-        print(f"❌ فشل تشغيل البناء: {response.status_code}")
-        print(response.text)
-        return {"success": False, "error": response.text}
+def send_log_to_channel(text):
+    if LOG_BOT_TOKEN and LOG_CHANNEL_ID:
+        requests.post(f"https://api.telegram.org/bot{LOG_BOT_TOKEN}/sendMessage", json={"chat_id": LOG_CHANNEL_ID, "text": text})
 
+def send_telegram_photo(chat_id, photo_path, caption):
+    if BOT_TOKEN and chat_id:
+        try:
+            with open(photo_path, "rb") as photo:
+                requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}, files={"photo": photo})
+        except: send_telegram_msg(chat_id, caption)
 
-def get_latest_run() -> dict:
-    url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/actions/workflows/{WORKFLOW_FILE}/runs?per_page=1"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        data = response.json()
-        runs = data.get("workflow_runs", [])
-        if runs:
-            run = runs[0]
-            return {
-                "id": run["id"],
-                "status": run["status"],
-                "conclusion": run["conclusion"],
-                "url": run["html_url"],
-                "created_at": run["created_at"]
-            }
-    return {}
+# --- الدالة الجديدة لتحديث كلودفلير ---
+def update_cloudflare_kv(gcp_url):
+    cf_account_id = os.environ.get("CF_ACCOUNT_ID")
+    cf_kv_id = os.environ.get("CF_KV_NAMESPACE_ID")
+    cf_api_token = os.environ.get("CF_API_TOKEN")
 
-
-def check_status() -> None:
-    run = get_latest_run()
-    if not run:
-        print("لا يوجد أي بناء سابق.")
+    if not all([cf_account_id, cf_kv_id, cf_api_token]):
+        send_telegram_msg(CHAT_ID, "⚠️ تحذير: لم يتم إعداد مفاتيح Cloudflare، الرابط يعمل لكن لم يتم تحديث الواجهة الثابتة.")
         return
-    status_map = {
-        "queued": "⏳ في الانتظار",
-        "in_progress": "🔄 جارٍ البناء",
-        "completed": "✅ اكتمل"
-    }
-    conclusion_map = {
-        "success": "✅ ناجح",
-        "failure": "❌ فشل",
-        "cancelled": "🚫 ملغى",
-        None: "—"
-    }
-    print(f"🆔 Run ID   : {run['id']}")
-    print(f"📌 الحالة  : {status_map.get(run['status'], run['status'])}")
-    print(f"🎯 النتيجة : {conclusion_map.get(run['conclusion'], run['conclusion'])}")
-    print(f"🕒 البدء   : {run['created_at']}")
-    print(f"🔗 الرابط  : {run['url']}")
 
+    url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account_id}/storage/kv/namespaces/{cf_kv_id}/values/LATEST_URL"
+    headers = {
+        "Authorization": f"Bearer {cf_api_token}",
+        "Content-Type": "text/plain"
+    }
+
+    try:
+        response = requests.put(url, headers=headers, data=gcp_url)
+        if response.status_code == 200:
+            send_telegram_msg(CHAT_ID, "🚀 <b>تم بنجاح!</b>\nتم تحديث الرابط في سيرفر Cloudflare الثابت. يمكنك الآن استخدام واجهتك الدائمة.")
+        else:
+            send_telegram_msg(ADMIN_ID, f"⚠️ خطأ في تحديث Cloudflare:\n{response.text}")
+    except Exception as e:
+        send_telegram_msg(ADMIN_ID, f"⚠️ فشل الاتصال بـ Cloudflare:\n{str(e)}")
+# --------------------------------------
+
+async def click_button_by_text_anywhere(page, text, exact=True, timeout_loop=120, post_click_wait=3):
+    pattern = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I) if exact else re.compile(re.escape(text), re.I)
+    async def _post_click_stabilize():
+        try: await page.wait_for_load_state("domcontentloaded", timeout=2000)
+        except: pass
+        await asyncio.sleep(post_click_wait)
+    for _ in range(timeout_loop):
+        for target in [page] + list(page.frames):
+            try:
+                btns = target.get_by_role("button", name=pattern)
+                for i in range(await btns.count() - 1, -1, -1):
+                    b = btns.nth(i)
+                    if await b.is_visible() and await b.is_enabled():
+                        await b.scroll_into_view_if_needed(timeout=1000); await b.click(timeout=3000, force=True); await _post_click_stabilize(); return True
+            except: pass
+        await asyncio.sleep(1)
+    return False
+
+async def try_click_terms_checkbox(page):
+    terms_regex = re.compile(r"i agree to the google cloud platform", re.I)
+    for _ in range(2):
+        for target in [page] + list(page.frames):
+            try:
+                cbs = target.get_by_role("checkbox")
+                for i in range(await cbs.count()):
+                    cb = cbs.nth(i)
+                    if await cb.is_visible(): await cb.click(timeout=1500, force=True); return True
+                locs = target.locator("label, div, span, [role='checkbox']").filter(has_text=terms_regex)
+                for i in range(await locs.count()):
+                    el = locs.nth(i)
+                    if await el.is_visible(): await el.click(timeout=1500, force=True); return True
+            except: pass
+        await asyncio.sleep(0.5)
+    return False
+
+async def get_cloudshell_frame(page):
+    for _ in range(60):
+        for f in page.frames:
+            if "shell.cloud.google.com" in (f.url or "").lower() or "embeddedcloudshell" in (f.url or "").lower(): return f
+        await asyncio.sleep(1)
+    return None
+
+async def wait_for_cloud_shell_prompt(page, timeout_loop=180):
+    prompt_patterns = [r"\$\s*$", r"cloudshell:~", r"student_.*@cloudshell", r"welcome to cloud shell"]
+    for _ in range(timeout_loop):
+        f = await get_cloudshell_frame(page)
+        if f:
+            try:
+                txt = await f.inner_text("body")
+                if any(re.search(pat, txt, re.I | re.M) for pat in prompt_patterns): return True
+            except: pass
+        await asyncio.sleep(1)
+    return False
+
+async def focus_terminal_near_prompt(page, timeout_loop=60):
+    for _ in range(timeout_loop):
+        f = await get_cloudshell_frame(page)
+        if f:
+            for sel in ["textarea.xterm-helper-textarea", "textarea", "div.xterm", "div.xterm-screen", "canvas"]:
+                try:
+                    loc = f.locator(sel).first
+                    if await loc.count() > 0 and await loc.is_visible():
+                        await loc.click(timeout=1500, force=True)
+                        box = await loc.bounding_box()
+                        if box: await page.mouse.click(box["x"] + 40, box["y"] + max(10, box["height"] - 20))
+                        return True
+                except: pass
+        await asyncio.sleep(1)
+    return False
+
+async def paste_command_and_run(page, command, timeout_verify=5):
+    await focus_terminal_near_prompt(page, timeout_loop=30)
+    f = await get_cloudshell_frame(page)
+    async def _paste_into_focused():
+        try:
+            f2 = await get_cloudshell_frame(page)
+            if f2:
+                await f2.evaluate("""(text) => {
+                    const ta = document.querySelector('textarea.xterm-helper-textarea');
+                    if (!ta) throw new Error('no xterm-helper-textarea');
+                    ta.focus();
+                    const dt = new DataTransfer();
+                    dt.setData('text/plain', text);
+                    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true });
+                    ta.dispatchEvent(ev);
+                }""", command)
+                return
+        except Exception:
+            pass
+        await page.keyboard.insert_text(command)
+        
+    if f:
+        try:
+            ta = f.locator("textarea.xterm-helper-textarea").first
+            if await ta.count() > 0:
+                await ta.focus()
+                await asyncio.sleep(0.2)
+                await _paste_into_focused()
+            else:
+                await _paste_into_focused()
+        except Exception:
+            await _paste_into_focused()
+    else:
+        await _paste_into_focused()
+        
+    await asyncio.sleep(0.8)
+    
+    try:
+        if f:
+            try:
+                ta = f.locator("textarea.xterm-helper-textarea").first
+                if await ta.count() > 0:
+                    await ta.focus()
+                    await asyncio.sleep(0.2)
+            except Exception:
+                pass
+        await page.keyboard.press("Enter")
+        return True
+    except Exception:
+        return False
+
+async def wait_for_yes_no_prompt(page, timeout_loop=120):
+    patterns = [r"\[y\/n\]", r"\(y\/n\)", r"\[y\/N\]", r"Do you want to continue", r"continue\?\s*$"]
+    for _ in range(timeout_loop):
+        f = await get_cloudshell_frame(page)
+        for target in ([f] if f else []) + [fr for fr in page.frames if fr != f] + [page]:
+            try:
+                txt = await target.inner_text("body")
+                if any(re.search(p, txt, re.I | re.M) for p in patterns): return True
+            except: pass
+        await asyncio.sleep(1)
+    return False
+
+async def type_short_answer_only(page, answer_text="y"):
+    await focus_terminal_near_prompt(page, timeout_loop=20)
+    f = await get_cloudshell_frame(page)
+    try:
+        if f and await f.locator("textarea.xterm-helper-textarea").first.count() > 0:
+            await f.locator("textarea.xterm-helper-textarea").first.focus(); await asyncio.sleep(0.2); await f.locator("textarea.xterm-helper-textarea").first.type(answer_text, delay=50)
+        else: await page.keyboard.insert_text(answer_text)
+    except: await page.keyboard.type(answer_text, delay=50)
+    await asyncio.sleep(0.4)
+    return True
+
+class LoginRequiredError(Exception): pass
+
+async def run_automation(lab_url):
+    send_telegram_msg(CHAT_ID, "✅ تم بدء العمل في السيرفر، يرجى الانتظار لمدة تتراوح بين 3 إلى 5 دقائق.")
+    
+    deploy_cmd_template = (
+        "gcloud run deploy my-app \\\n"
+        "  --image=docker.io/nkka404/vless-ws:latest \\\n"
+        "  --platform=managed \\\n"
+        "  --allow-unauthenticated \\\n"
+        "  --port=8080 \\\n"
+        "  --cpu=2 \\\n"
+        "  --memory=4Gi \\\n"
+        "  --concurrency=1000 \\\n"
+        "  --timeout=3600 \\\n"
+        "  --min-instances=2 \\\n"
+        "  --max-instances=8 \\\n"
+        "  --execution-environment=gen2 \\\n"
+        "  --cpu-boost \\\n"
+        "  --region={REGION}"
+    )
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=["--lang=en-US", "--no-sandbox", "--disable-gpu"])
+        context = await browser.new_context(locale="en-US", viewport={'width': 1280, 'height': 720})
+        page = await context.new_page()
+        
+        try:
+            await page.goto(lab_url, timeout=600000, wait_until="domcontentloaded")
+            await asyncio.sleep(5)
+            
+            if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible(): raise LoginRequiredError()
+            if await page.locator("text='Use your Google Account'").first.count() > 0 and await page.locator("text='Use your Google Account'").first.is_visible(): raise LoginRequiredError()
+            
+            clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
+            if clicked_understand: await asyncio.sleep(10) 
+            
+            await try_click_terms_checkbox(page)
+            await asyncio.sleep(2)
+            await click_button_by_text_anywhere(page, "Agree and continue", exact=True, timeout_loop=60)
+            await asyncio.sleep(3)
+            
+            for sel in ['button[aria-label*="Activate Cloud Shell"]', 'button[title*="Cloud Shell"]']:
+                try:
+                    loc = page.locator(sel).first
+                    if await loc.count() > 0 and await loc.is_visible(): await loc.click(timeout=3000, force=True); break
+                except: pass
+                
+            await asyncio.sleep(5) 
+            await click_button_by_text_anywhere(page, "Continue", exact=True, timeout_loop=60)
+            await click_button_by_text_anywhere(page, "Authorize", exact=True, timeout_loop=60)
+            
+            if await wait_for_cloud_shell_prompt(page):
+                url_re = re.compile(r"Service URL:\s*(https://[a-zA-Z0-9.-]+\.run\.app)", re.I)
+                
+                regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
+                
+                for region in regions:
+                    cmd = deploy_cmd_template.replace("{REGION}", region)
+                    await paste_command_and_run(page, cmd)
+                    
+                    y_sent = False
+                    
+                    for _ in range(150):
+                        f = await get_cloudshell_frame(page)
+                        if not f: 
+                            await asyncio.sleep(1)
+                            continue
+                        
+                        txt = await f.inner_text("body")
+                        txt_lower = txt.lower()
+                        
+                        if not y_sent and await wait_for_yes_no_prompt(page, timeout_loop=1):
+                            await type_short_answer_only(page, "y")
+                            try: await page.keyboard.press("Enter")
+                            except: pass
+                            y_sent = True
+                        
+                        match = url_re.search(txt)
+                        if match:
+                            final_url = match.group(1)
+                            # إرسال الرابط الأصلي
+                            send_log_to_channel(f"#DONE|{CHAT_ID}|{final_url}")
+                            send_telegram_msg(CHAT_ID, f"✅ تم استخراج الرابط بنجاح!\nالرابط المؤقت: <code>{final_url}</code>\n\n🔄 جاري تحديث واجهة Cloudflare الثابتة...")
+                            
+                            # تشغيل دالة التحديث
+                            update_cloudflare_kv(final_url)
+                            return
+                        
+                        has_error = any(indicator in txt_lower for indicator in ERROR_INDICATORS)
+                        
+                        if has_error:
+                            print(f"Failed in {region}, clearing terminal and moving to next...")
+                            await paste_command_and_run(page, "clear")
+                            await asyncio.sleep(2)
+                            break 
+                            
+                        await asyncio.sleep(3)
+                
+                raise Exception("فشل الوصول للتيرمنال أو فشل النشر في جميع المناطق.")
+
+        except LoginRequiredError:
+            send_telegram_msg(CHAT_ID, "⚠️ <b>الرابط منتهي ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
+            send_log_to_channel(f"#FAILED|{CHAT_ID}") 
+        
+        except Exception as e:
+            send_telegram_msg(CHAT_ID, "❌ <b>حدث خطأ أثناء المعالجة!</b>\nتم إلغاء طلبك، يرجى التأكد من صلاحية الرابط.")
+            send_log_to_channel(f"#FAILED|{CHAT_ID}") 
+            try: await page.screenshot(path="error.png", full_page=True); send_telegram_photo(ADMIN_ID, "error.png", f"🔴 خطأ لمستخدم {CHAT_ID}:\n{str(e)[:150]}")
+            except: pass
+        finally:
+            await browser.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("الاستخدام:")
-        print("  python main.py build [version]   — تشغيل البناء")
-        print("  python main.py status            — فحص حالة آخر بناء")
-        sys.exit(0)
-
-    command = sys.argv[1].lower()
-
-    if command == "build":
-        version = sys.argv[2] if len(sys.argv) > 2 else "1.0.0"
-        trigger_build(version)
-    elif command == "status":
-        check_status()
-    else:
-        print(f"أمر غير معروف: {command}")
+    url = os.environ.get("LAB_URL")
+    if url: asyncio.run(run_automation(url))
