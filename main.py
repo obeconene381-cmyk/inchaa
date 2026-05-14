@@ -276,36 +276,71 @@ async def click_launch_with_credits_aggressive(page):
     return False
 
 # ===============================================
-# 🔥 التعديل الوحيد هنا: 10 ثواني (10000 ms) لاستخراج الرابط 🔥
+# 🔥 الدالة المعدلة حصرياً لاستخراج الرابط بشكل مضمون 🔥
 # ===============================================
 async def get_cloud_console_link(page):
-    send_tg("⏳ جاري انتظار تحميل اللاب وظهور زر 'Open Google Cloud console'...")
+    send_tg("⏳ جاري انتظار توليد اللاب وظهور زر 'Open Google Cloud console'...")
     try:
-        # الانتظار حتى 10 ثواني كحد أقصى (10000 ميلي ثانية)
-        btn_locator = page.locator("a:has-text('Open Google Cloud console')").first
-        await btn_locator.wait_for(state="visible", timeout=10000)
+        # إعطاء مساحة زمنية لكي ينتهي اللاب من التحميل بعد الدفع
+        await asyncio.sleep(5)
         
-        # استخراج الرابط من خاصية href
-        link = await btn_locator.get_attribute("href")
-        
+        link = None
+        # سنقوم بـ 20 محاولة للبحث المتواصل (كل محاولة تأخذ ثانية)
+        for _ in range(20):
+            link = await page.evaluate('''() => {
+                const textToFind = 'Open Google Cloud console';
+                
+                // 1. البحث المباشر في عناصر <a>
+                const aElements = Array.from(document.querySelectorAll('a'));
+                for (let a of aElements) {
+                    if (a.textContent && a.textContent.includes(textToFind) && a.href) {
+                        return a.href;
+                    }
+                }
+                
+                // 2. البحث في أي عنصر آخر يحتوي على النص، ثم سحب الرابط من الأب
+                const allElements = Array.from(document.querySelectorAll('*'));
+                for (let el of allElements) {
+                    if (el.textContent && el.textContent.includes(textToFind)) {
+                        // نبحث عن أقرب <a> يحيط بالنص
+                        const closestA = el.closest('a');
+                        if (closestA && closestA.href) return closestA.href;
+                        
+                        // أو أقرب عنصر يمتلك خاصية href
+                        const closestHref = el.closest('[href]');
+                        if (closestHref && closestHref.getAttribute('href')) {
+                            let h = closestHref.getAttribute('href');
+                            if (h.startsWith('http')) return h;
+                        }
+                    }
+                }
+                return null;
+            }''')
+            
+            if link:
+                break # وجدنا الرابط، نخرج من حلقة البحث
+            await asyncio.sleep(1) 
+            
         if link:
             success_msg = f"🎉 مبروك! تم بدء اللاب بنجاح.\n\n🔗 رابط الكونسول:\n{link}"
             send_tg(success_msg)
             return link
         else:
-            send_tg("⚠️ ظهر الزر لكن لم يتم العثور على رابط (href) بداخله.")
+            send_tg("⚠️ ظهر اللاب ولكن عجزنا عن استخراج الرابط (href) من الزر.")
+            await page.screenshot(path="debug_console_link.png")
+            send_tg("صورة للخطأ:", "debug_console_link.png")
             
     except Exception as e:
-        error_msg = "⚠️ فشل العثور على زر 'Open Google Cloud console' بعد الانتظار."
+        error_msg = "⚠️ فشل العثور على زر 'Open Google Cloud console'."
         try:
-            await page.screenshot(path="debug_console_link.png")
-            send_tg(error_msg, "debug_console_link.png")
+            await page.screenshot(path="debug_console_link_err.png")
+            send_tg(error_msg, "debug_console_link_err.png")
         except:
             send_tg(error_msg + f"\nالخطأ: {e}")
     return None
 
 # ===============================================
-# الكابتشا والشخص الأصفر (نفسها التي أرسلتها في رسالتك)
+# الكابتشا والشخص الأصفر (كما هي دون تغيير إطلاقاً)
 # ===============================================
 async def method_1_direct_click(page):
     send_tg("🎯 محاولة النقر المباشر على الشخص الأصفر...")
