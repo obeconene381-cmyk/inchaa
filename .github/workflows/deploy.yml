@@ -1,11 +1,12 @@
-name: Run Playwright Bot
+name: Run Playwright Bot on Windows
 
 on:
-  workflow_dispatch: # هذا السطر يسمح لك بتشغيل السكريبت يدوياً بضغطة زر متى شئت
+  workflow_dispatch: # هذا السطر يسمح لك بتشغيل السكريبت يدوياً متى شئت
 
 jobs:
   run-script:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest # ⬅️ هنا طلبنا جهاز ويندوز من جيتهاب
+    timeout-minutes: 360 # ⬅️ تحديد وقت التشغيل الأقصى بـ 6 ساعات كما طلبت
 
     steps:
     - name: Checkout repository
@@ -17,17 +18,12 @@ jobs:
         python-version: '3.10'
 
     - name: Install dependencies
+      # تثبيت المكاتب مباشرة في سطر الأوامر (لا حاجة لملف requirements.txt)
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install playwright requests
         playwright install chromium
 
-    - name: Install Virtual Display (xvfb)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb
-
     - name: Run Bot Script
-      run: |
-        # أداة xvfb-run تهم للمتصفح أن هناك شاشة حقيقية مقاسها 1280x720 لكي لا يعطي أخطاء
-        xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" python main.py
+      # تشغيل السكريبت الخاص بك
+      run: python main.py
