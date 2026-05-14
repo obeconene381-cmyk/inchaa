@@ -1,49 +1,33 @@
-name: Auto VLESS Deploy (with Cloudflare)
+name: Run Playwright Bot
 
 on:
-  workflow_dispatch:
-    inputs:
-      lab_url:
-        description: 'Qwiklabs URL'
-        required: true
-        type: string
-      chat_id:
-        description: 'Telegram Chat ID'
-        required: true
-        type: string
+  workflow_dispatch: # هذا السطر يسمح لك بتشغيل السكريبت يدوياً بضغطة زر متى شئت
 
 jobs:
-  deploy:
+  run-script:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # ⏱️ إيقاف إجباري بعد 15 دقيقة
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-      - name: Install Requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install playwright requests
-          playwright install chromium --with-deps
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        playwright install chromium
 
-      - name: Run Playwright Script
-        env:
-          # المتغيرات القديمة تاعك
-          LAB_URL: ${{ github.event.inputs.lab_url }}
-          TELEGRAM_CHAT_ID: ${{ github.event.inputs.chat_id }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          ADMIN_ID: ${{ secrets.ADMIN_ID }}
-          LOG_BOT_TOKEN: ${{ secrets.LOG_BOT_TOKEN }}
-          
-          # 🆕 المتغيرات الجديدة تاع كلودفلير (زدناهم هنا)
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+    - name: Install Virtual Display (xvfb)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
 
-        run: python main.py
+    - name: Run Bot Script
+      run: |
+        # أداة xvfb-run تهم للمتصفح أن هناك شاشة حقيقية مقاسها 1280x720 لكي لا يعطي أخطاء
+        xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" python main.py
