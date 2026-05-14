@@ -276,71 +276,52 @@ async def click_launch_with_credits_aggressive(page):
     return False
 
 # ===============================================
-# 🔥 الدالة المعدلة حصرياً لاستخراج الرابط بشكل مضمون 🔥
+# 🔥 تم تعديل هذه الدالة فقط لسحب الرابط بالقوة 🔥
 # ===============================================
 async def get_cloud_console_link(page):
-    send_tg("⏳ جاري انتظار توليد اللاب وظهور زر 'Open Google Cloud console'...")
+    send_tg("⏳ جاري انتظار استخراج رابط الكونسول (قد يستغرق بعض الوقت)...")
     try:
-        # إعطاء مساحة زمنية لكي ينتهي اللاب من التحميل بعد الدفع
-        await asyncio.sleep(5)
-        
+        await asyncio.sleep(5) # ننتظر اللاب ليجهز
         link = None
-        # سنقوم بـ 20 محاولة للبحث المتواصل (كل محاولة تأخذ ثانية)
+        
+        # محاولات متكررة لجلب الرابط عبر الجافاسكريبت
         for _ in range(20):
             link = await page.evaluate('''() => {
-                const textToFind = 'Open Google Cloud console';
-                
-                // 1. البحث المباشر في عناصر <a>
-                const aElements = Array.from(document.querySelectorAll('a'));
-                for (let a of aElements) {
-                    if (a.textContent && a.textContent.includes(textToFind) && a.href) {
-                        return a.href;
-                    }
-                }
-                
-                // 2. البحث في أي عنصر آخر يحتوي على النص، ثم سحب الرابط من الأب
-                const allElements = Array.from(document.querySelectorAll('*'));
-                for (let el of allElements) {
-                    if (el.textContent && el.textContent.includes(textToFind)) {
-                        // نبحث عن أقرب <a> يحيط بالنص
-                        const closestA = el.closest('a');
-                        if (closestA && closestA.href) return closestA.href;
-                        
-                        // أو أقرب عنصر يمتلك خاصية href
-                        const closestHref = el.closest('[href]');
-                        if (closestHref && closestHref.getAttribute('href')) {
-                            let h = closestHref.getAttribute('href');
-                            if (h.startsWith('http')) return h;
+                const text = 'Open Google Cloud console';
+                const all = Array.from(document.querySelectorAll('*'));
+                for (let el of all) {
+                    if (el.textContent && el.textContent.includes(text)) {
+                        // نحاول إيجاد أي رابط A يحيط بالنص
+                        let a = el.closest('a');
+                        if (a && a.href) return a.href;
+                        // أو أي عنصر يحمل خاصية href
+                        let parentHref = el.closest('[href]');
+                        if (parentHref && parentHref.getAttribute('href')) {
+                            return parentHref.getAttribute('href');
                         }
                     }
                 }
                 return null;
             }''')
             
-            if link:
-                break # وجدنا الرابط، نخرج من حلقة البحث
-            await asyncio.sleep(1) 
+            if link and link.startswith('http'):
+                break # وجدنا الرابط، نخرج من الحلقة
+            await asyncio.sleep(1)
             
         if link:
             success_msg = f"🎉 مبروك! تم بدء اللاب بنجاح.\n\n🔗 رابط الكونسول:\n{link}"
             send_tg(success_msg)
             return link
         else:
-            send_tg("⚠️ ظهر اللاب ولكن عجزنا عن استخراج الرابط (href) من الزر.")
-            await page.screenshot(path="debug_console_link.png")
-            send_tg("صورة للخطأ:", "debug_console_link.png")
+            send_tg("⚠️ ظهر اللاب ولكن عجزنا عن استخراج الرابط.")
             
     except Exception as e:
-        error_msg = "⚠️ فشل العثور على زر 'Open Google Cloud console'."
-        try:
-            await page.screenshot(path="debug_console_link_err.png")
-            send_tg(error_msg, "debug_console_link_err.png")
-        except:
-            send_tg(error_msg + f"\nالخطأ: {e}")
+        error_msg = f"⚠️ فشل استخراج الرابط: {e}"
+        send_tg(error_msg)
     return None
 
 # ===============================================
-# الكابتشا والشخص الأصفر (كما هي دون تغيير إطلاقاً)
+# الكابتشا والشخص الأصفر (نفسها التي أرسلتها بدون أي تغيير)
 # ===============================================
 async def method_1_direct_click(page):
     send_tg("🎯 محاولة النقر المباشر على الشخص الأصفر...")
@@ -447,10 +428,10 @@ async def run():
                 else:
                     send_tg("ملاحظة: لم يظهر مربع الكابتشا.")
                 
-                # 1. الضغط على زر الدفع بالكريدت
+                # 1. الضغط على زر الدفع
                 is_launched = await click_launch_with_credits_aggressive(page)
                 
-                # 2. إذا نجح في الدفع، ننتظر رابط الكونسول ونستخرجه
+                # 2. استخراج الرابط
                 if is_launched:
                     await get_cloud_console_link(page)
 
