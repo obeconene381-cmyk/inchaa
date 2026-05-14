@@ -236,7 +236,6 @@ async def click_captcha_checkbox(page):
 
 async def click_launch_with_credits_aggressive(page):
     send_tg("⏳ جاري البحث عن زر Launch with 5 Credits...")
-    
     for _ in range(15):
         try:
             js_success = await page.evaluate('''() => {
@@ -248,7 +247,6 @@ async def click_launch_with_credits_aggressive(page):
                 }
                 return false;
             }''')
-            
             if js_success:
                 send_tg("✅ تم الضغط على Launch with 5 Credits بنجاح (طريقة JS)!")
                 return True
@@ -264,10 +262,8 @@ async def click_launch_with_credits_aggressive(page):
                 await text_locator.click(force=True)
                 send_tg("✅ تم الضغط على Launch with 5 Credits بنجاح (طريقة Text)!")
                 return True
-
         except Exception:
             pass 
-        
         await asyncio.sleep(1)
 
     screenshot_path = "debug_credits_button.png"
@@ -275,54 +271,42 @@ async def click_launch_with_credits_aggressive(page):
     send_tg("⚠️ ما زال يعجز عن إيجاد الزر، انظر الصورة:", screenshot_path)
     return False
 
-# ===============================================
-# 🔥 تم تعديل هذه الدالة فقط لسحب الرابط بالقوة 🔥
-# ===============================================
 async def get_cloud_console_link(page):
-    send_tg("⏳ جاري انتظار استخراج رابط الكونسول (قد يستغرق بعض الوقت)...")
+    send_tg("⏳ جاري انتظار ظهور زر 'Open Google Cloud console' واستخراج الرابط...")
     try:
-        await asyncio.sleep(5) # ننتظر اللاب ليجهز
-        link = None
+        btn = page.locator("text=Open Google Cloud console").first
+        await btn.wait_for(state="visible", timeout=15000)
         
-        # محاولات متكررة لجلب الرابط عبر الجافاسكريبت
-        for _ in range(20):
+        link = await btn.get_attribute("href")
+        
+        if not link:
             link = await page.evaluate('''() => {
-                const text = 'Open Google Cloud console';
-                const all = Array.from(document.querySelectorAll('*'));
-                for (let el of all) {
-                    if (el.textContent && el.textContent.includes(text)) {
-                        // نحاول إيجاد أي رابط A يحيط بالنص
-                        let a = el.closest('a');
-                        if (a && a.href) return a.href;
-                        // أو أي عنصر يحمل خاصية href
-                        let parentHref = el.closest('[href]');
-                        if (parentHref && parentHref.getAttribute('href')) {
-                            return parentHref.getAttribute('href');
-                        }
-                    }
+                let elements = Array.from(document.querySelectorAll('*'));
+                let target = elements.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
+                if (target) {
+                    return target.getAttribute('href') || 
+                           (target.parentElement && target.parentElement.getAttribute('href')) || 
+                           (target.shadowRoot && target.shadowRoot.querySelector('a') && target.shadowRoot.querySelector('a').getAttribute('href'));
                 }
                 return null;
             }''')
-            
-            if link and link.startswith('http'):
-                break # وجدنا الرابط، نخرج من الحلقة
-            await asyncio.sleep(1)
-            
+
         if link:
             success_msg = f"🎉 مبروك! تم بدء اللاب بنجاح.\n\n🔗 رابط الكونسول:\n{link}"
             send_tg(success_msg)
             return link
         else:
-            send_tg("⚠️ ظهر اللاب ولكن عجزنا عن استخراج الرابط.")
+            send_tg("⚠️ ظهر الزر لكن لم نتمكن من سحب الرابط (href) منه.")
             
     except Exception as e:
-        error_msg = f"⚠️ فشل استخراج الرابط: {e}"
-        send_tg(error_msg)
+        error_msg = "⚠️ فشل العثور على الزر بعد الانتظار."
+        try:
+            await page.screenshot(path="debug_console_link.png")
+            send_tg(error_msg, "debug_console_link.png")
+        except:
+            send_tg(error_msg + f"\nالخطأ: {e}")
     return None
 
-# ===============================================
-# الكابتشا والشخص الأصفر (نفسها التي أرسلتها بدون أي تغيير)
-# ===============================================
 async def method_1_direct_click(page):
     send_tg("🎯 محاولة النقر المباشر على الشخص الأصفر...")
     try:
@@ -359,7 +343,6 @@ async def method_1_direct_click(page):
 
 async def try_all_buster_methods(page):
     send_tg("🚀 بدء عملية حل الكابتشا...")
-    
     if await page.locator('.recaptcha-checkbox-checked').is_visible():
         send_tg("✅ تم الحل بالفعل مبكراً!")
         return True
@@ -372,12 +355,8 @@ async def try_all_buster_methods(page):
     success = await method_1_direct_click(page)
     return success
 
-# ===============================================
-# الدالة الرئيسية
-# ===============================================
-
 async def run():
-    send_tg("🚀 بدء المهمة...")
+    send_tg("🚀 بدء المهمة على GitHub Actions...")
     ext_path = await setup_compiled_buster()
     if not ext_path: 
         return
@@ -388,7 +367,7 @@ async def run():
     async with async_playwright() as p:
         context = await p.chromium.launch_persistent_context(
             user_data_dir,
-            headless=False,
+            headless=False, # مبقي عليها False لكي تعمل الإضافة، وسنتجاوز ذلك عبر الشاشة الوهمية في الأكشنز
             no_viewport=True, 
             args=[
                 f"--disable-extensions-except={ext_path}", 
@@ -428,10 +407,8 @@ async def run():
                 else:
                     send_tg("ملاحظة: لم يظهر مربع الكابتشا.")
                 
-                # 1. الضغط على زر الدفع
                 is_launched = await click_launch_with_credits_aggressive(page)
                 
-                # 2. استخراج الرابط
                 if is_launched:
                     await get_cloud_console_link(page)
 
@@ -448,7 +425,7 @@ async def run():
                 send_tg(f"{error_msg}\n(فشل التقاط الصورة: {pic_err})")
                 
         finally:
-            await asyncio.sleep(10) # ننتظر قليلاً قبل إغلاق المتصفح في النهاية
+            await asyncio.sleep(10)
             await context.close()
 
 if __name__ == "__main__":
