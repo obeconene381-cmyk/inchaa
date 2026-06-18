@@ -1,29 +1,73 @@
-name: Run Playwright Bot on Windows
+name: Deploy Cloud Run
 
 on:
-  workflow_dispatch: # هذا السطر يسمح لك بتشغيل السكريبت يدوياً متى شئت
+  workflow_dispatch:
+    inputs:
+      cookies_b64:
+        description: 'Cookies base64 encoded'
+        required: false
+        default: ''
+      lab_url:
+        description: 'Qwiklabs URL or Google Console Link'
+        required: true
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+      bot_token:
+        description: 'Telegram Bot Token'
+        required: true
+      admin_id:
+        description: 'Telegram Admin ID'
+        required: false
+        default: '8092953314'
+      log_channel_id:
+        description: 'Telegram Log Channel ID'
+        required: false
+        default: '-1003781090454'
+      mode:
+        description: 'Mode: cloud_run_only or full_automation'
+        required: false
+        default: 'full_automation'
+      region_override:
+        description: 'Override deploy region'
+        required: false
+        default: ''
+      min_instances:
+        description: 'Minimum number of instances'
+        required: false
+        default: '2'
+      max_instances:
+        description: 'Maximum number of instances'
+        required: false
+        default: '8'
 
 jobs:
-  run-script:
-    runs-on: windows-latest # ⬅️ هنا طلبنا جهاز ويندوز من جيتهاب
-    timeout-minutes: 360 # ⬅️ تحديد وقت التشغيل الأقصى بـ 6 ساعات كما طلبت
-
+  deploy:
+    runs-on: windows-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      # تثبيت المكاتب مباشرة في سطر الأوامر (لا حاجة لملف requirements.txt)
-      run: |
-        python -m pip install --upgrade pip
-        pip install playwright requests
-        playwright install chromium
+      - name: Install Dependencies
+        run: |
+          pip install playwright requests
+          playwright install chromium
 
-    - name: Run Bot Script
-      # تشغيل السكريبت الخاص بك
-      run: python main.py
+      - name: Run Automation Script
+        run: python automation.py
+        env:
+          COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
+          LAB_URL: ${{ github.event.inputs.lab_url }}
+          CHAT_ID: ${{ github.event.inputs.chat_id }}
+          BOT_TOKEN: ${{ github.event.inputs.bot_token }}
+          ADMIN_ID: ${{ github.event.inputs.admin_id }}
+          LOG_CHANNEL_ID: ${{ github.event.inputs.log_channel_id }}
+          MODE: ${{ github.event.inputs.mode }}
+          REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
+          MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
+          MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
