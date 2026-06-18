@@ -9,9 +9,9 @@ import json
 import base64
 from playwright.async_api import async_playwright
 
-# إصلاح مشكلة asyncio على Windows (ProactorEventLoop قد تسبب خطأ مع Playwright)
+# إصلاح مشكلة asyncio على Windows
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # ==========================================
 # الإعدادات - تُقرأ من متغيرات البيئة
@@ -19,10 +19,10 @@ if sys.platform == "win32":
 BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", ""))
 CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", ""))
 ADMIN_ID = os.environ.get("ADMIN_ID", "8092953314")
-LAB_URL = os.environ.get("LAB_URL", "")  # رابط اللاب أو الكونسول
+LAB_URL = os.environ.get("LAB_URL", "")  
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "-1003781090454")
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
-MODE = os.environ.get("MODE", "full_automation")  # 'cloud_run_only' أو 'full_automation'
+MODE = os.environ.get("MODE", "full_automation")  
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")
 LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", BOT_TOKEN)
 MIN_INSTANCES = os.environ.get("MIN_INSTANCES", "2")
@@ -272,7 +272,7 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
-        send_tg("📥 جاري تحميل إضافة حل الكابتشا...")
+        # 🟢 تم مسح إشعار تحميل الإضافة للمستخدم (تنبيه داخلي للمشرف فقط عند الفشل)
         r = requests.get(BUSTER_COMPILED_URL, timeout=30)
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
@@ -307,7 +307,7 @@ async def click_start_lab_button(page):
             btn = page.get_by_role("button", name=pattern).first
             if await btn.is_visible():
                 await btn.click(force=True)
-                send_tg("✅ تم الضغط على Start Lab")
+                # 🟢 تم إزالة رسالة إشعار الضغط للمستخدم
                 return True
         except: pass
         await asyncio.sleep(1)
@@ -322,7 +322,7 @@ async def click_captcha_checkbox(page):
             checkbox = frame_content.locator('.recaptcha-checkbox-border').first
             if await checkbox.is_visible():
                 await human_click(page, checkbox)
-                send_tg("✅ تم الضغط على مربع الكابتشا")
+                # 🟢 تم إزالة رسالة إشعار الكابتشا للمستخدم
                 return True
         except: continue
     return False
@@ -360,7 +360,7 @@ async def get_cloud_console_link(page):
                 return t ? (t.getAttribute('href') || (t.parentElement && t.parentElement.getAttribute('href'))) : null;
             }''')
         if link:
-            send_tg(f"🔗 تم الحصول على رابط الكونسول بنجاح.")
+            # 🟢 تم إزالة الإشعار الداخلي للمستخدم لتقليل الرسائل
             return link
     except Exception as e:
         try:
@@ -401,7 +401,6 @@ async def try_all_buster_methods(page):
 # استخراج وحل تسجيل الدخول لـ Google
 # ==========================================
 async def extract_credentials(page):
-    """استخراج البريد وكلمة المرور من لوحة بيانات Qwiklabs"""
     try:
         email = None
         password = None
@@ -425,16 +424,13 @@ async def extract_credentials(page):
         return None, None
 
 async def handle_google_login(page, email, password):
-    """أتمتة تسجيل الدخول لحساب الطالب المخصص"""
     try:
-        # إدخال البريد الإلكتروني
         email_input = page.locator("input#identifierId").first
         if await email_input.count() > 0 and await email_input.is_visible():
             await email_input.fill(email)
             await page.keyboard.press("Enter")
             await asyncio.sleep(4)
             
-        # إدخال كلمة المرور
         pass_input = page.locator("input[type='password']").first
         if await pass_input.count() > 0 and await pass_input.is_visible():
             await pass_input.fill(password)
@@ -460,8 +456,7 @@ async def detect_page_state(page):
 # أتمتة نشر Cloud Run
 # ==========================================
 async def run_cloud_run_deploy_flow(page, console_link):
-    send_tg("⏳ جاري تهيئة موصل الخدمة (Cloud Shell)...")
-    
+    # 🟢 إزالة الرسالة الفرعية للمستخدم المتعلقة بتهيئة السحابة والـ Cloud Shell
     clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
     if clicked_understand: await asyncio.sleep(5) 
     
@@ -470,7 +465,6 @@ async def run_cloud_run_deploy_flow(page, console_link):
     await click_button_by_text_anywhere(page, "Agree and continue", exact=True, timeout_loop=60)
     await asyncio.sleep(3)
     
-    # تشغيل الكلاود شيل
     activated = False
     for sel in ['button[aria-label*="Activate Cloud Shell"]', 'button[title*="Cloud Shell"]']:
         try:
@@ -486,7 +480,7 @@ async def run_cloud_run_deploy_flow(page, console_link):
     await click_button_by_text_anywhere(page, "Authorize", exact=True, timeout_loop=60)
     
     if await wait_for_cloud_shell_prompt(page):
-        send_tg("💻 تم فتح Cloud Shell بنجاح! جاري النشر...")
+        # 🟢 إزالة إشعار فتح واجهة الأوامر للمستخدم
         url_re = re.compile(r"Service URL:\s*(https://[a-zA-Z0-9.-]+\.run\.app)", re.I)
         
         if REGION_OVERRIDE and REGION_OVERRIDE.strip():
@@ -541,7 +535,7 @@ async def run_cloud_run_deploy_flow(page, console_link):
                     except: pass
                     y_sent = True
                 
-                # كشف رابط النجاح
+                # كشف رابط النجاح (يتم إرساله للمستخدم)
                 match = url_re.search(txt)
                 if match:
                     final_url = match.group(1)
@@ -549,11 +543,10 @@ async def run_cloud_run_deploy_flow(page, console_link):
                     send_log(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
                     return
                 
-                # كشف الأخطاء
                 has_error = any(indicator in txt_lower for indicator in ERROR_INDICATORS)
                 if has_error:
                     print(f"Failed in {region}, moving to next...")
-                    break # الانتقال للمنطقة التالية
+                    break 
                     
                 await asyncio.sleep(3)
                 
@@ -575,13 +568,14 @@ async def run():
             send_tg("⚠️ رابط اللاب غير موجود.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
-    else:  # cloud_run_only
+    else:  
         if not LAB_URL:
             send_tg("⚠️ رابط الكونسول غير موجود.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
 
-    send_tg("🚀 بدء المهمة...")
+    # 🚀 الرسالة الوحيدة الأساسية للمستخدم عند البدء بناءً على طلبك
+    send_tg("🚀 تم بدء عملية الإنشاء، يرجى الانتظار...")
     send_admin(f"🔔 مهمة أتمتة جديدة ({MODE})\nالمستخدم: {CHAT_ID}\nالرابط: {LAB_URL}")
 
     ext_path = None
@@ -589,14 +583,13 @@ async def run():
         ext_path = await setup_compiled_buster()
         if not ext_path:
             send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
+            send_tg("❌ فشل عملية الإنشاء.")
             return
 
     user_data_dir = os.path.abspath("chrome_profile")
     page = None
 
     async with async_playwright() as p:
-        # استخدام headless=True بشكل جيد على Windows بدون الحاجة لبيئة عرض (display server)
-        # لا نستخدم --no-sandbox و--disable-gpu لأنها مخصصة لـ Linux فقط
         launch_args = [
             "--disable-blink-features=AutomationControlled",
             "--start-maximized",
@@ -612,10 +605,10 @@ async def run():
             
         context = await p.chromium.launch_persistent_context(
             user_data_dir,
-            headless=True,
+            headless=False, 
             no_viewport=True,
             args=launch_args,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
         
         try:
@@ -669,7 +662,8 @@ async def run():
                         email, password = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
                     else:
-                        send_tg("❌ فشل الإنشاء (Credits).")
+                        # 🟢 تم تحويلها إلى رسالة فشل عامة دون ذكر تفاصيل الـ Credits
+                        send_tg("❌ فشل عملية الإنشاء.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
                         return
                 else:
@@ -681,16 +675,16 @@ async def run():
                         send_tg("⚠️ رابط اللاب غير صالح.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
                     else:
-                        send_tg("❌ لم يُعثر على زر Start Lab.")
+                        # 🟢 تم تحويلها إلى خطأ عام بدلاً من ذكر زر Start Lab للمستخدم
+                        send_tg("❌ فشل عملية الإنشاء.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
                     try: await page.screenshot(path="no_start.png"); send_admin(f"فشل Start Lab - {CHAT_ID}", "no_start.png")
                     except: pass
                     return
-            else:  # cloud_run_only
+            else:  
                 console_link = LAB_URL
 
             if console_link:
-                # فتح الكونسول
                 await page.goto(console_link, timeout=300000, wait_until="domcontentloaded")
                 await asyncio.sleep(5)
 
@@ -699,7 +693,7 @@ async def run():
                 
                 if is_login_page or is_google_acc:
                     if email and password:
-                        send_tg("🔐 تسجيل الدخول التلقائي في Google Cloud Console...")
+                        # 🟢 تم مسح الرسالة التنبيهية للمستخدم لتسجيل الدخول التلقائي لتقليل الإزعاج
                         await handle_google_login(page, email, password)
                         if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible():
                             raise LoginRequiredError()
@@ -708,11 +702,12 @@ async def run():
 
                 await run_cloud_run_deploy_flow(page, console_link)
             else:
-                send_tg("❌ لم يتم الحصول على رابط كونسول صالح.")
+                # 🟢 تم جعلها رسالة فشل عامة بدلاً من تفاصيل رابط الكونسول
+                send_tg("❌ فشل عملية الإنشاء.")
                 send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
 
         except LoginRequiredError:
-            send_tg("⚠️ الرابط منتهي ويطلب تسجيل الدخول! تم إلغاء طلبك.")
+            send_tg("❌ الرابط منتهي، تم إلغاء طلبك.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
             try:
                 await page.screenshot(path="login_required.png")
