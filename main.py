@@ -9,22 +9,23 @@ import json
 import base64
 from playwright.async_api import async_playwright
 
-# إصلاح مشكلة asyncio على Windows
+# ✅ إصلاح إلزامي لـ Playwright على Windows لدعم العمليات الفرعية (Subprocesses)
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # ==========================================
 # الإعدادات - تُقرأ من متغيرات البيئة
 # ==========================================
-BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", ""))
-CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", ""))
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ADMIN_ID = os.environ.get("ADMIN_ID", "8092953314")
-LAB_URL = os.environ.get("LAB_URL", "")  
-LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "-1004367699466")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
+LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", BOT_TOKEN) 
+LOG_CHANNEL_ID = "-1003781090454"
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
-MODE = os.environ.get("MODE", "full_automation")  
-REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")
-LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", BOT_TOKEN)
+MODE = os.environ.get("MODE", "full_automation")  # 'cloud_run_only' أو 'full_automation'
+
+# متغيرات كونسول السحاب الافتراضية
 MIN_INSTANCES = os.environ.get("MIN_INSTANCES", "2")
 MAX_INSTANCES = os.environ.get("MAX_INSTANCES", "8")
 
@@ -55,46 +56,29 @@ except Exception:
 class LoginRequiredError(Exception): pass
 
 # ==========================================
-# دوال الإرسال
+# دوال الإرسال (تتوافق مع أسماء الكود الأساسي)
 # ==========================================
-def send_tg(msg, img=None):
-    """إرسال رسالة للمستخدم"""
-    if not BOT_TOKEN or not CHAT_ID: return
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
-    try:
-        if img and os.path.exists(img):
-            with open(img, "rb") as f:
-                requests.post(url + "sendPhoto", data={"chat_id": CHAT_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": f}, timeout=30)
-        else:
-            requests.post(url + "sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
-    except:
-        pass
+def send_telegram_msg(chat_id, text):
+    if BOT_TOKEN and chat_id:
+        try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=30)
+        except: pass
 
-def send_admin(msg, img=None):
-    """إرسال رسالة/صورة للمشرف فقط"""
-    if not BOT_TOKEN or not ADMIN_ID: return
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
-    try:
-        if img and os.path.exists(img):
-            with open(img, "rb") as f:
-                requests.post(url + "sendPhoto", data={"chat_id": ADMIN_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": f}, timeout=30)
-        else:
-            requests.post(url + "sendMessage", json={"chat_id": ADMIN_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
-    except:
-        pass
-
-def send_log(msg):
-    """إرسال نتيجة لقناة اللوج"""
+def send_log_to_channel(text):
     token_to_use = LOG_BOT_TOKEN if LOG_BOT_TOKEN else BOT_TOKEN
-    if not token_to_use or not LOG_CHANNEL_ID: return
-    try:
-        requests.post(f"https://api.telegram.org/bot{token_to_use}/sendMessage",
-                      json={"chat_id": LOG_CHANNEL_ID, "text": msg}, timeout=30)
-    except:
-        pass
+    if token_to_use and LOG_CHANNEL_ID:
+        try: requests.post(f"https://api.telegram.org/bot{token_to_use}/sendMessage", json={"chat_id": LOG_CHANNEL_ID, "text": text}, timeout=30)
+        except: pass
+
+def send_telegram_photo(chat_id, photo_path, caption):
+    if BOT_TOKEN and chat_id:
+        try:
+            with open(photo_path, "rb") as photo:
+                requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}, files={"photo": photo}, timeout=30)
+        except: 
+            send_telegram_msg(chat_id, caption)
 
 # ==========================================
-# دوال مساعدة للتحكم والـ UI لقسم الكلاود شيل
+# دوال التحكم والـ UI لقسم الكلاود شيل
 # ==========================================
 async def click_button_by_text_anywhere(page, text, exact=True, timeout_loop=120, post_click_wait=3):
     pattern = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I) if exact else re.compile(re.escape(text), re.I)
@@ -125,15 +109,11 @@ async def try_click_terms_checkbox(page):
                 cbs = target.get_by_role("checkbox")
                 for i in range(await cbs.count()):
                     cb = cbs.nth(i)
-                    if await cb.is_visible():
-                        await cb.click(timeout=1500, force=True)
-                        return True
+                    if await cb.is_visible(): await cb.click(timeout=1500, force=True); return True
                 locs = target.locator("label, div, span, [role='checkbox']").filter(has_text=terms_regex)
                 for i in range(await locs.count()):
                     el = locs.nth(i)
-                    if await el.is_visible():
-                        await el.click(timeout=1500, force=True)
-                        return True
+                    if await el.is_visible(): await el.click(timeout=1500, force=True); return True
             except: pass
         await asyncio.sleep(0.5)
     return False
@@ -141,8 +121,7 @@ async def try_click_terms_checkbox(page):
 async def get_cloudshell_frame(page):
     for _ in range(60):
         for f in page.frames:
-            if "shell.cloud.google.com" in (f.url or "").lower() or "embeddedcloudshell" in (f.url or "").lower():
-                return f
+            if "shell.cloud.google.com" in (f.url or "").lower() or "embeddedcloudshell" in (f.url or "").lower(): return f
         await asyncio.sleep(1)
     return None
 
@@ -153,8 +132,7 @@ async def wait_for_cloud_shell_prompt(page, timeout_loop=180):
         if f:
             try:
                 txt = await f.inner_text("body")
-                if any(re.search(pat, txt, re.I | re.M) for pat in prompt_patterns):
-                    return True
+                if any(re.search(pat, txt, re.I | re.M) for pat in prompt_patterns): return True
             except: pass
         await asyncio.sleep(1)
     return False
@@ -169,8 +147,7 @@ async def focus_terminal_near_prompt(page, timeout_loop=60):
                     if await loc.count() > 0 and await loc.is_visible():
                         await loc.click(timeout=1500, force=True)
                         box = await loc.bounding_box()
-                        if box:
-                            await page.mouse.click(box["x"] + 40, box["y"] + max(10, box["height"] - 20))
+                        if box: await page.mouse.click(box["x"] + 40, box["y"] + max(10, box["height"] - 20))
                         return True
                 except: pass
         await asyncio.sleep(1)
@@ -201,25 +178,18 @@ async def paste_command_and_run(page, command):
         try:
             ta = f.locator("textarea.xterm-helper-textarea").first
             if await ta.count() > 0:
-                await ta.focus()
-                await asyncio.sleep(0.2)
-                await _paste_into_focused()
-            else:
-                await _paste_into_focused()
-        except Exception:
-            await _paste_into_focused()
-            
+                await ta.focus(); await asyncio.sleep(0.2); await _paste_into_focused()
+            else: await _paste_into_focused()
+        except Exception: await _paste_into_focused()
+    else: await _paste_into_focused()
+        
     await asyncio.sleep(0.8)
-    
     try:
         if f:
             try:
                 ta = f.locator("textarea.xterm-helper-textarea").first
-                if await ta.count() > 0:
-                    await ta.focus()
-                    await asyncio.sleep(0.2)
-            except Exception:
-                pass
+                if await ta.count() > 0: await ta.focus(); await asyncio.sleep(0.2)
+            except Exception: pass
         await page.keyboard.press("Enter")
         return True
     except Exception:
@@ -232,8 +202,7 @@ async def wait_for_yes_no_prompt(page, timeout_loop=3):
         for target in ([f] if f else []) + [fr for fr in page.frames if fr != f] + [page]:
             try:
                 txt = await target.inner_text("body")
-                if any(re.search(p, txt, re.I | re.M) for p in patterns):
-                    return True
+                if any(re.search(p, txt, re.I | re.M) for p in patterns): return True
             except: pass
         await asyncio.sleep(1)
     return False
@@ -243,18 +212,14 @@ async def type_short_answer_only(page, answer_text="y"):
     f = await get_cloudshell_frame(page)
     try:
         if f and await f.locator("textarea.xterm-helper-textarea").first.count() > 0:
-            await f.locator("textarea.xterm-helper-textarea").first.focus()
-            await asyncio.sleep(0.2)
-            await f.locator("textarea.xterm-helper-textarea").first.type(answer_text, delay=50)
-        else:
-            await page.keyboard.insert_text(answer_text)
-    except:
-        await page.keyboard.type(answer_text, delay=50)
+            await f.locator("textarea.xterm-helper-textarea").first.focus(); await asyncio.sleep(0.2); await f.locator("textarea.xterm-helper-textarea").first.type(answer_text, delay=50)
+        else: await page.keyboard.insert_text(answer_text)
+    except: await page.keyboard.type(answer_text, delay=50)
     await asyncio.sleep(0.4)
     return True
 
 # ==========================================
-# دوال أتمتة Qwiklabs (Start Lab)
+# دوال أتمتة Qwiklabs / Google Skills
 # ==========================================
 def fix_cookies_for_playwright(cookies):
     valid_samesite = ["Strict", "Lax", "None"]
@@ -272,14 +237,13 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
-        # 🟢 تم مسح إشعار تحميل الإضافة للمستخدم (تنبيه داخلي للمشرف فقط عند الفشل)
         r = requests.get(BUSTER_COMPILED_URL, timeout=30)
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
         os.remove(zip_path)
         return ext_dir
     except Exception as e:
-        send_admin(f"❌ فشل تحميل Buster: {e}")
+        if ADMIN_ID: send_telegram_msg(ADMIN_ID, f"❌ فشل تحميل Buster: {e}")
         return None
 
 async def human_click(page, locator):
@@ -287,8 +251,7 @@ async def human_click(page, locator):
         await locator.scroll_into_view_if_needed()
         await locator.click(force=True, delay=200)
         return True
-    except:
-        return False
+    except: return False
 
 async def dismiss_credits_modal(page):
     try:
@@ -307,7 +270,6 @@ async def click_start_lab_button(page):
             btn = page.get_by_role("button", name=pattern).first
             if await btn.is_visible():
                 await btn.click(force=True)
-                # 🟢 تم إزالة رسالة إشعار الضغط للمستخدم
                 return True
         except: pass
         await asyncio.sleep(1)
@@ -322,7 +284,6 @@ async def click_captcha_checkbox(page):
             checkbox = frame_content.locator('.recaptcha-checkbox-border').first
             if await checkbox.is_visible():
                 await human_click(page, checkbox)
-                # 🟢 تم إزالة رسالة إشعار الكابتشا للمستخدم
                 return True
         except: continue
     return False
@@ -344,7 +305,7 @@ async def click_launch_with_credits_aggressive(page):
         await asyncio.sleep(1)
     try:
         await page.screenshot(path="debug_credits.png")
-        send_admin("⚠️ لم يُعثر على زر Credits", "debug_credits.png")
+        if ADMIN_ID: send_telegram_photo(ADMIN_ID, "debug_credits.png", "⚠️ لم يُعثر على زر Credits")
     except: pass
     return False
 
@@ -359,13 +320,11 @@ async def get_cloud_console_link(page):
                 let t = els.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
                 return t ? (t.getAttribute('href') || (t.parentElement && t.parentElement.getAttribute('href'))) : null;
             }''')
-        if link:
-            # 🟢 تم إزالة الإشعار الداخلي للمستخدم لتقليل الرسائل
-            return link
+        return link
     except Exception as e:
         try:
             await page.screenshot(path="debug_console.png")
-            send_admin(f"⚠️ فشل استخراج رابط الكونسول: {e}", "debug_console.png")
+            if ADMIN_ID: send_telegram_photo(ADMIN_ID, "debug_console.png", f"⚠️ فشل استخراج رابط الكونسول: {e}")
         except: pass
     return None
 
@@ -387,7 +346,7 @@ async def method_1_direct_click(page):
             except: pass
             return True
     except Exception as e:
-        send_admin(f"❌ خطأ حل الكابتشا: {e}")
+        if ADMIN_ID: send_telegram_msg(ADMIN_ID, f"❌ خطأ حل الكابتشا: {e}")
     return False
 
 async def try_all_buster_methods(page):
@@ -398,81 +357,50 @@ async def try_all_buster_methods(page):
     return await method_1_direct_click(page)
 
 # ==========================================
-# استخراج وحل تسجيل الدخول لـ Google
+# استخراج بيانات الدخول ومعالجة حساب الطالب لقوقل
 # ==========================================
 async def extract_credentials(page):
     try:
-        email = None
-        password = None
-        
+        email, password = None, None
         email_el = page.locator("[data-credential='username'], #student-username, #content-credentials-email").first
-        if await email_el.count() > 0:
-            email = (await email_el.inner_text()).strip()
-            
+        if await email_el.count() > 0: email = (await email_el.inner_text()).strip()
         pass_el = page.locator("[data-credential='password'], #student-password, #content-credentials-password").first
-        if await pass_el.count() > 0:
-            password = (await pass_el.inner_text()).strip()
-            
+        if await pass_el.count() > 0: password = (await pass_el.inner_text()).strip()
+        
         if not email:
             html = await page.content()
             match = re.search(r"student-[0-9a-fA-F-]+@qwiklabs\.net", html)
-            if match:
-                email = match.group(0)
-                
+            if match: email = match.group(0)
         return email, password
-    except:
-        return None, None
+    except: return None, None
 
 async def handle_google_login(page, email, password):
     try:
         email_input = page.locator("input#identifierId").first
         if await email_input.count() > 0 and await email_input.is_visible():
-            await email_input.fill(email)
-            await page.keyboard.press("Enter")
-            await asyncio.sleep(4)
-            
+            await email_input.fill(email); await page.keyboard.press("Enter"); await asyncio.sleep(4)
         pass_input = page.locator("input[type='password']").first
         if await pass_input.count() > 0 and await pass_input.is_visible():
-            await pass_input.fill(password)
-            await page.keyboard.press("Enter")
-            await asyncio.sleep(6)
+            await pass_input.fill(password); await page.keyboard.press("Enter"); await asyncio.sleep(6)
     except Exception as e:
-        print(f"Error handling Google login: {e}")
-
-async def detect_page_state(page):
-    try:
-        url = page.url.lower()
-        for s in ["sign_in", "signin", "login", "accounts.google.com", "servicelogin"]:
-            if s in url: return "EXPIRED_ACCOUNT"
-        content = (await page.content()).lower()
-        for s in ["404", "not found", "page not found", "unavailable", "does not exist"]:
-            if s in content: return "INVALID_LAB"
-        for s in ["sign in to continue", "sign in with google", "choose an account"]:
-            if s in content: return "EXPIRED_ACCOUNT"
-    except: pass
-    return "OK"
+        print(f"Error Google login: {e}")
 
 # ==========================================
-# أتمتة نشر Cloud Run
+# أتمتة نشر Cloud Run (نفس كود السيكريت الأصلي)
 # ==========================================
 async def run_cloud_run_deploy_flow(page, console_link):
-    # 🟢 إزالة الرسالة الفرعية للمستخدم المتعلقة بتهيئة السحابة والـ Cloud Shell
     clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
-    if clicked_understand: await asyncio.sleep(5) 
+    if clicked_understand: await asyncio.sleep(10) 
     
     await try_click_terms_checkbox(page)
     await asyncio.sleep(2)
     await click_button_by_text_anywhere(page, "Agree and continue", exact=True, timeout_loop=60)
     await asyncio.sleep(3)
     
-    activated = False
     for sel in ['button[aria-label*="Activate Cloud Shell"]', 'button[title*="Cloud Shell"]']:
         try:
             loc = page.locator(sel).first
-            if await loc.count() > 0 and await loc.is_visible():
-                await loc.click(timeout=3000, force=True)
-                activated = True
-                break
+            if await loc.count() > 0 and await loc.is_visible(): await loc.click(timeout=3000, force=True); break
         except: pass
         
     await asyncio.sleep(5) 
@@ -480,7 +408,6 @@ async def run_cloud_run_deploy_flow(page, console_link):
     await click_button_by_text_anywhere(page, "Authorize", exact=True, timeout_loop=60)
     
     if await wait_for_cloud_shell_prompt(page):
-        # 🟢 إزالة إشعار فتح واجهة الأوامر للمستخدم
         url_re = re.compile(r"Service URL:\s*(https://[a-zA-Z0-9.-]+\.run\.app)", re.I)
         
         if REGION_OVERRIDE and REGION_OVERRIDE.strip():
@@ -489,6 +416,23 @@ async def run_cloud_run_deploy_flow(page, console_link):
             regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
             
         deploy_wait_loops = 20
+        deploy_cmd_template = (
+            "gcloud run deploy my-app \\\n"
+            "  --project=$DEVSHELL_PROJECT_ID \\\n"
+            "  --image=docker.io/nkka404/vless-ws:latest \\\n"
+            "  --platform=managed \\\n"
+            "  --allow-unauthenticated \\\n"
+            "  --port=8080 \\\n"
+            "  --cpu=2 \\\n"
+            "  --memory=4Gi \\\n"
+            "  --concurrency=1000 \\\n"
+            "  --timeout=3600 \\\n"
+            "  --min-instances=" + MIN_INSTANCES + " \\\n"
+            "  --max-instances=" + MAX_INSTANCES + " \\\n"
+            "  --execution-environment=gen2 \\\n"
+            "  --cpu-boost \\\n"
+            "  --region={REGION}"
+        )
         
         for region in regions:
             try:
@@ -499,25 +443,8 @@ async def run_cloud_run_deploy_flow(page, console_link):
                 await asyncio.sleep(2)
             except: pass
 
-            deploy_cmd = (
-                "gcloud run deploy my-app \\\n"
-                "  --project=$DEVSHELL_PROJECT_ID \\\n"
-                "  --image=docker.io/nkka404/vless-ws:latest \\\n"
-                "  --platform=managed \\\n"
-                "  --allow-unauthenticated \\\n"
-                "  --port=8080 \\\n"
-                "  --cpu=2 \\\n"
-                "  --memory=4Gi \\\n"
-                "  --concurrency=1000 \\\n"
-                "  --timeout=3600 \\\n"
-                "  --min-instances=" + MIN_INSTANCES + " \\\n"
-                "  --max-instances=" + MAX_INSTANCES + " \\\n"
-                "  --execution-environment=gen2 \\\n"
-                "  --cpu-boost \\\n"
-                "  --region=" + region
-            )
-            
-            await paste_command_and_run(page, deploy_cmd)
+            cmd = deploy_cmd_template.replace("{REGION}", region)
+            await paste_command_and_run(page, cmd)
             
             y_sent = False
             for step in range(deploy_wait_loops):
@@ -535,12 +462,11 @@ async def run_cloud_run_deploy_flow(page, console_link):
                     except: pass
                     y_sent = True
                 
-                # كشف رابط النجاح (يتم إرساله للمستخدم)
                 match = url_re.search(txt)
                 if match:
                     final_url = match.group(1)
-                    send_tg(f"🎉 <b>تم النشر بنجاح!</b>\nالرابط: <code>{final_url}</code>\nالمنطقة: {region}")
-                    send_log(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
+                    send_log_to_channel(f"#DONE|{CHAT_ID}|{final_url}")
+                    send_telegram_msg(CHAT_ID, f"🎉 <b>تم النشر بنجاح!</b>\nالرابط: <code>{final_url}</code>\nالمنطقة: {region}")
                     return
                 
                 has_error = any(indicator in txt_lower for indicator in ERROR_INDICATORS)
@@ -555,60 +481,48 @@ async def run_cloud_run_deploy_flow(page, console_link):
         raise Exception("فشل تحميل واجهة الأوامر Cloud Shell.")
 
 # ==========================================
-# الدالة الرئيسية
+# الدالة الرئيسية للتشغيل والدمج الذكي
 # ==========================================
 async def run():
-    if MODE == "full_automation":
-        if not COOKIES_B64 or not MY_COOKIES:
-            send_tg("⚠️ الكوكيز غير صالحة. يرجى تحديث الكوكيز.")
-            send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-            send_admin(f"❌ كوكيز فارغة/تالفة - المستخدم: {CHAT_ID}")
-            return
-        if not LAB_URL:
-            send_tg("⚠️ رابط اللاب غير موجود.")
-            send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
-            return
-    else:  
-        if not LAB_URL:
-            send_tg("⚠️ رابط الكونسول غير موجود.")
-            send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
-            return
+    if MODE == "full_automation" and (not COOKIES_B64 or not MY_COOKIES):
+        send_telegram_msg(CHAT_ID, "❌ <b>فشل بدء العملية:</b> الكوكيز منتهية أو تالفة، يرجى تحديثها.")
+        send_log_to_channel(f"#FAILED|{CHAT_ID}")
+        return
 
-    # 🚀 الرسالة الوحيدة الأساسية للمستخدم عند البدء بناءً على طلبك
-    send_tg("🚀 تم بدء عملية الإنشاء، يرجى الانتظار...")
-    send_admin(f"🔔 مهمة أتمتة جديدة ({MODE})\nالمستخدم: {CHAT_ID}\nالرابط: {LAB_URL}")
+    if not LAB_URL:
+        send_telegram_msg(CHAT_ID, "❌ <b>فشل بدء العملية:</b> رابط التشغيل مفقود.")
+        send_log_to_channel(f"#FAILED|{CHAT_ID}")
+        return
+
+    # 🚀 إرسال الرسالة النظيفة والوحيدة المطلوبة للمستخدم عند بدء التشغيل
+    send_telegram_msg(CHAT_ID, "✅ تم بدء العمل في السيرفر، يرجى الانتظار...")
+    if ADMIN_ID: send_telegram_msg(ADMIN_ID, f"🔔 مهمة أتمتة جديدة ({MODE})\nالمستخدم: {CHAT_ID}\nالرابط: {LAB_URL}")
 
     ext_path = None
     if MODE == "full_automation":
         ext_path = await setup_compiled_buster()
         if not ext_path:
-            send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
-            send_tg("❌ فشل عملية الإنشاء.")
+            send_telegram_msg(CHAT_ID, "❌ <b>حدث خطأ أثناء المعالجة أو فشل النشر!</b>\nتم إلغاء طلبك.")
+            send_log_to_channel(f"#FAILED|{CHAT_ID}")
             return
 
     user_data_dir = os.path.abspath("chrome_profile")
-    page = None
+    # تنظيف الكاش القديم لتجنب تعليق الجلسة وثبات الأخطاء
+    if os.path.exists(user_data_dir):
+        try: shutil.rmtree(user_data_dir)
+        except: pass
 
     async with async_playwright() as p:
-        launch_args = [
-            "--disable-blink-features=AutomationControlled",
-            "--start-maximized",
-            "--disable-infobars",
-            "--disable-dev-shm-usage",
-        ]
+        launch_args = ["--disable-blink-features=AutomationControlled", "--start-maximized", "--disable-infobars", "--disable-dev-shm-usage", "--no-sandbox"]
         if ext_path:
-            launch_args.extend([
-                f"--disable-extensions-except={ext_path}",
-                f"--load-extension={ext_path}",
-                "--disable-features=IsolateOrigins,site-per-process"
-            ])
+            launch_args.extend([f"--disable-extensions-except={ext_path}", f"--load-extension={ext_path}", "--disable-features=IsolateOrigins,site-per-process"])
             
         context = await p.chromium.launch_persistent_context(
             user_data_dir,
-            headless=False, 
+            headless=False, # مبقي عليها False لكي تعمل إضافة تخطي الكابتشا بنجاح
             no_viewport=True,
             args=launch_args,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, Gecko) Chrome/124.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
         
         try:
@@ -626,22 +540,9 @@ async def run():
             if MODE == "full_automation":
                 raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
                 await context.add_cookies(fix_cookies_for_playwright(raw_cookies))
-                await page.goto(LAB_URL, timeout=60000)
-                await asyncio.sleep(4)
-
-                state = await detect_page_state(page)
-                if state == "EXPIRED_ACCOUNT":
-                    send_tg("⚠️ حسابك تالف. يرجى تحديث الكوكيز.")
-                    send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-                    try: await page.screenshot(path="expired.png"); send_admin(f"حساب تالف - {CHAT_ID}", "expired.png")
-                    except: pass
-                    return
-                if state == "INVALID_LAB":
-                    send_tg("⚠️ رابط اللاب غير صالح.")
-                    send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
-                    try: await page.screenshot(path="invalid.png"); send_admin(f"لاب غير موجود - {CHAT_ID}", "invalid.png")
-                    except: pass
-                    return
+                
+                await page.goto(LAB_URL, timeout=300000, wait_until="domcontentloaded")
+                await asyncio.sleep(5)
 
                 await dismiss_credits_modal(page)
                 if await click_start_lab_button(page):
@@ -651,37 +552,15 @@ async def run():
                         await try_all_buster_methods(page)
                         await asyncio.sleep(3)
 
-                    state2 = await detect_page_state(page)
-                    if state2 == "EXPIRED_ACCOUNT":
-                        send_tg("⚠️ حسابك تالف. يرجى تحديث الكوكيز.")
-                        send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-                        return
-
                     if await click_launch_with_credits_aggressive(page):
                         await asyncio.sleep(5)
                         email, password = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
                     else:
-                        # 🟢 تم تحويلها إلى رسالة فشل عامة دون ذكر تفاصيل الـ Credits
-                        send_tg("❌ فشل عملية الإنشاء.")
-                        send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
-                        return
+                        raise Exception("فشل الضغط على Launch with Credits")
                 else:
-                    s3 = await detect_page_state(page)
-                    if s3 == "EXPIRED_ACCOUNT":
-                        send_tg("⚠️ حسابك تالف.")
-                        send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-                    elif s3 == "INVALID_LAB":
-                        send_tg("⚠️ رابط اللاب غير صالح.")
-                        send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
-                    else:
-                        # 🟢 تم تحويلها إلى خطأ عام بدلاً من ذكر زر Start Lab للمستخدم
-                        send_tg("❌ فشل عملية الإنشاء.")
-                        send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
-                    try: await page.screenshot(path="no_start.png"); send_admin(f"فشل Start Lab - {CHAT_ID}", "no_start.png")
-                    except: pass
-                    return
-            else:  
+                    raise Exception("فشل العثور أو النقر على زر Start Lab الرئيسي")
+            else:
                 console_link = LAB_URL
 
             if console_link:
@@ -693,7 +572,6 @@ async def run():
                 
                 if is_login_page or is_google_acc:
                     if email and password:
-                        # 🟢 تم مسح الرسالة التنبيهية للمستخدم لتسجيل الدخول التلقائي لتقليل الإزعاج
                         await handle_google_login(page, email, password)
                         if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible():
                             raise LoginRequiredError()
@@ -702,28 +580,19 @@ async def run():
 
                 await run_cloud_run_deploy_flow(page, console_link)
             else:
-                # 🟢 تم جعلها رسالة فشل عامة بدلاً من تفاصيل رابط الكونسول
-                send_tg("❌ فشل عملية الإنشاء.")
-                send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
+                raise Exception("رابط كونسول السحابة فارغ أو لم يستخرج")
 
         except LoginRequiredError:
-            send_tg("❌ الرابط منتهي، تم إلغاء طلبك.")
-            send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-            try:
-                await page.screenshot(path="login_required.png")
-                send_admin(f"🔴 يطلب تسجيل دخول - {CHAT_ID}", "login_required.png")
-            except: pass
+            send_telegram_msg(CHAT_ID, "⚠️ <b>الرابط منتهي ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
+            send_log_to_channel(f"#FAILED|{CHAT_ID}")
         except Exception as e:
-            send_tg("❌ حدث خطأ أثناء المعالجة أو فشل النشر.")
-            send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
+            # 🟢 يتم دائماً إرسال رسالة فشل عامة وواضحة جداً للمستخدم بدون أي تفاصيل تقنية تفضح الكابتشا أو الـ Credits
+            send_telegram_msg(CHAT_ID, "❌ <b>حدث خطأ أثناء المعالجة أو فشل النشر!</b>\nتم إلغاء طلبك.")
+            send_log_to_channel(f"#FAILED|{CHAT_ID}")
             try:
-                if page:
-                    await page.screenshot(path="crash.png")
-                    send_admin(f"🔥 خطأ: {e}\nمستخدم: {CHAT_ID}", "crash.png")
-                else:
-                    send_admin(f"🔥 خطأ: {e}\nمستخدم: {CHAT_ID}")
-            except:
-                send_admin(f"🔥 خطأ: {e}")
+                await page.screenshot(path="error.png", full_page=True)
+                if ADMIN_ID: send_telegram_photo(ADMIN_ID, "error.png", f"🔴 خطأ داخلي لمستخدم {CHAT_ID}:\n{str(e)[:200]}")
+            except: pass
         finally:
             await asyncio.sleep(5)
             await context.close()
