@@ -19,6 +19,7 @@ if sys.platform == "win32":
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ADMIN_ID = os.environ.get("ADMIN_ID", "8092953314")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+LAB_URL = os.environ.get("LAB_URL", "")  # ✅ تم إعادتها هنا لحل المشكلة تماماً
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
 LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", BOT_TOKEN) 
 LOG_CHANNEL_ID = "-1003781090454"
@@ -56,7 +57,7 @@ except Exception:
 class LoginRequiredError(Exception): pass
 
 # ==========================================
-# دوال الإرسال (تتوافق مع أسماء الكود الأساسي)
+# دوال الإرسال 
 # ==========================================
 def send_telegram_msg(chat_id, text):
     if BOT_TOKEN and chat_id:
@@ -386,7 +387,7 @@ async def handle_google_login(page, email, password):
         print(f"Error Google login: {e}")
 
 # ==========================================
-# أتمتة نشر Cloud Run (نفس كود السيكريت الأصلي)
+# أتمتة نشر Cloud Run 
 # ==========================================
 async def run_cloud_run_deploy_flow(page, console_link):
     clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
@@ -481,7 +482,7 @@ async def run_cloud_run_deploy_flow(page, console_link):
         raise Exception("فشل تحميل واجهة الأوامر Cloud Shell.")
 
 # ==========================================
-# الدالة الرئيسية للتشغيل والدمج الذكي
+# الدالة الرئيسية للتشغيل
 # ==========================================
 async def run():
     if MODE == "full_automation" and (not COOKIES_B64 or not MY_COOKIES):
@@ -494,7 +495,7 @@ async def run():
         send_log_to_channel(f"#FAILED|{CHAT_ID}")
         return
 
-    # 🚀 إرسال الرسالة النظيفة والوحيدة المطلوبة للمستخدم عند بدء التشغيل
+    # رسالة وحيدة نظيفة للمستخدم كما طلبت
     send_telegram_msg(CHAT_ID, "✅ تم بدء العمل في السيرفر، يرجى الانتظار...")
     if ADMIN_ID: send_telegram_msg(ADMIN_ID, f"🔔 مهمة أتمتة جديدة ({MODE})\nالمستخدم: {CHAT_ID}\nالرابط: {LAB_URL}")
 
@@ -507,7 +508,6 @@ async def run():
             return
 
     user_data_dir = os.path.abspath("chrome_profile")
-    # تنظيف الكاش القديم لتجنب تعليق الجلسة وثبات الأخطاء
     if os.path.exists(user_data_dir):
         try: shutil.rmtree(user_data_dir)
         except: pass
@@ -519,7 +519,7 @@ async def run():
             
         context = await p.chromium.launch_persistent_context(
             user_data_dir,
-            headless=False, # مبقي عليها False لكي تعمل إضافة تخطي الكابتشا بنجاح
+            headless=False, 
             no_viewport=True,
             args=launch_args,
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -586,7 +586,6 @@ async def run():
             send_telegram_msg(CHAT_ID, "⚠️ <b>الرابط منتهي ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
             send_log_to_channel(f"#FAILED|{CHAT_ID}")
         except Exception as e:
-            # 🟢 يتم دائماً إرسال رسالة فشل عامة وواضحة جداً للمستخدم بدون أي تفاصيل تقنية تفضح الكابتشا أو الـ Credits
             send_telegram_msg(CHAT_ID, "❌ <b>حدث خطأ أثناء المعالجة أو فشل النشر!</b>\nتم إلغاء طلبك.")
             send_log_to_channel(f"#FAILED|{CHAT_ID}")
             try:
