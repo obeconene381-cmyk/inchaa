@@ -59,7 +59,7 @@ jobs:
           playwright install chromium
 
       - name: Run Automation Script
-        run: python automation.py
+        run: python main.py
         env:
           COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
           LAB_URL: ${{ github.event.inputs.lab_url }}
