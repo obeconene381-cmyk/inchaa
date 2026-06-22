@@ -272,6 +272,7 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
+        send_tg("📥 جاري تحميل إضافة حل الكابتشا...")
         r = requests.get(BUSTER_COMPILED_URL, timeout=30)
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
@@ -326,38 +327,24 @@ async def click_captcha_checkbox(page):
     return False
 
 async def click_launch_with_credits_aggressive(page):
-    credit_selectors = [
-        "button:has-text('Launch with')",
-        "text=Launch with 1 Credit",
-        "text=Launch with 5 Credits",
-        "button:has-text('Credit')",
-        "div[role='button']:has-text('Launch with')"
-    ]
-    
-    for _ in range(20):
+    # تم تعديل الفحص هنا ليدعم "Launch with 1 Credit" أو أي رقم آخر مرن عبر التعبيرات النمطية
+    credit_pattern = re.compile(r"Launch with \d+ Credit", re.IGNORECASE)
+    for _ in range(15):
         try:
-            btn = page.get_by_role("button", name=re.compile(r"Launch with \d+ Credit", re.I)).first
-            if await btn.is_visible() and await btn.is_enabled():
-                await btn.click(force=True)
-                return True
-                
-            for selector in credit_selectors:
-                loc = page.locator(selector).first
-                if await loc.count() > 0 and await loc.is_visible():
-                    await loc.click(force=True)
-                    return True
-                    
-            js_click = await page.evaluate('''() => {
-                const elements = Array.from(document.querySelectorAll('button, div[role="button"], span, a'));
-                const found = elements.find(el => /Launch with \\d+ Credit/i.test(el.textContent || ''));
-                if (found) { found.click(); return true; }
-                return false;
+            js_success = await page.evaluate('''() => {
+                let els = Array.from(document.querySelectorAll('*'));
+                let t = els.find(e => e.textContent && /Launch with \\d+ Credit/i.test(e.textContent.get_by_role() || e.textContent.trim()));
+                if(t) { t.click(); return true; } return false;
             }''')
-            if js_click: return True
+            if js_success: return True
             
+            xp = page.get_by_role("button", name=credit_pattern).first
+            if await xp.is_visible(): await xp.click(force=True); return True
+            
+            tl = page.locator("button").filter(has_text=credit_pattern).first
+            if await tl.is_visible(): await tl.click(force=True); return True
         except: pass
         await asyncio.sleep(1)
-        
     try:
         await page.screenshot(path="debug_credits.png")
         send_admin("⚠️ لم يُعثر على زر Credits وتوقف السكريبت هنا:", "debug_credits.png")
@@ -596,6 +583,9 @@ async def run():
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
 
+    # رسالة ترحيبية ومطمئنة للمستخدم، وتم إلغاء تنبيه المشرف لعدم إزعاجه عند بدء العمليات الناجحة
+    send_tg("🚀 بدء المهمة... جاري بدء عملية الإنشاء التلقائي لحسابك، يرجى الانتظار ولا تقلق سنقوم بتهيئة كل شيء من أجلك وبأفضل دقة ممكنة ✨")
+
     ext_path = None
     if MODE == "full_automation":
         ext_path = await setup_compiled_buster()
@@ -661,10 +651,6 @@ async def run():
                     except: pass
                     return
 
-                # === [ تعديل السطر ] ===
-                # هنا تم الدخول للاب بنجاح وتجاوز جميع الفحوصات بنجاح، نرسل الآن رسالة البدء للمستخدم
-                send_tg("🚀 بدء المهمة... جاري بدء عملية الإنشاء التلقائي لحسابك، يرجى الانتظار ولا تقلق سنقوم بتهيئة كل شيء من أجلك وبأفضل دقة ممكنة ✨")
-
                 await dismiss_credits_modal(page)
                 if await click_start_lab_button(page):
                     await asyncio.sleep(5)
@@ -701,8 +687,6 @@ async def run():
                     return
             else:  # cloud_run_only
                 console_link = LAB_URL
-                # نرسل رسالة البدء مباشرة في طور الكلاود رن المنفصل
-                send_tg("🚀 بدء المهمة... جاري بدء عملية الإنشاء التلقائي لحسابك، يرجى الانتظار ولا تقلق سنقوم بتهيئة كل شيء من أجلك وبأفضل دقة ممكنة ✨")
 
             if console_link:
                 # فتح الكونسول
