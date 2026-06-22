@@ -279,7 +279,6 @@ async def setup_compiled_buster():
         os.remove(zip_path)
         return ext_dir
     except Exception as e:
-        send_admin(f"❌ فشل تحميل Buster: {e}")
         return None
 
 async def human_click(page, locator):
@@ -328,23 +327,27 @@ async def click_captcha_checkbox(page):
     return False
 
 async def click_launch_with_credits_aggressive(page):
+    # تم تعديل الفحص هنا ليدعم "Launch with 1 Credit" أو أي رقم آخر مرن عبر التعبيرات النمطية
+    credit_pattern = re.compile(r"Launch with \d+ Credit", re.IGNORECASE)
     for _ in range(15):
         try:
             js_success = await page.evaluate('''() => {
                 let els = Array.from(document.querySelectorAll('*'));
-                let t = els.find(e => e.textContent && e.textContent.trim() === 'Launch with 5 Credits');
+                let t = els.find(e => e.textContent && /Launch with \\d+ Credit/i.test(e.textContent.get_by_role() || e.textContent.trim()));
                 if(t) { t.click(); return true; } return false;
             }''')
             if js_success: return True
-            xp = page.locator("xpath=//*[text()='Launch with 5 Credits']").first
+            
+            xp = page.get_by_role("button", name=credit_pattern).first
             if await xp.is_visible(): await xp.click(force=True); return True
-            tl = page.locator("text=Launch with 5 Credits").first
+            
+            tl = page.locator("button").filter(has_text=credit_pattern).first
             if await tl.is_visible(): await tl.click(force=True); return True
         except: pass
         await asyncio.sleep(1)
     try:
         await page.screenshot(path="debug_credits.png")
-        send_admin("⚠️ لم يُعثر على زر Credits", "debug_credits.png")
+        send_admin("⚠️ لم يُعثر على زر Credits وتوقف السكريبت هنا:", "debug_credits.png")
     except: pass
     return False
 
@@ -387,7 +390,7 @@ async def method_1_direct_click(page):
             except: pass
             return True
     except Exception as e:
-        send_admin(f"❌ خطأ حل الكابتشا: {e}")
+        pass
     return False
 
 async def try_all_buster_methods(page):
@@ -541,7 +544,7 @@ async def run_cloud_run_deploy_flow(page, console_link):
                     except: pass
                     y_sent = True
                 
-                # كشف رابط النجاح
+                # كشف رابط النجاح (يُرسل للمستخدم بالكامل)
                 match = url_re.search(txt)
                 if match:
                     final_url = match.group(1)
@@ -567,27 +570,27 @@ async def run_cloud_run_deploy_flow(page, console_link):
 async def run():
     if MODE == "full_automation":
         if not COOKIES_B64 or not MY_COOKIES:
-            send_tg("⚠️ الكوكيز غير صالحة. يرجى تحديث الكوكيز.")
+            send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-            send_admin(f"❌ كوكيز فارغة/تالفة - المستخدم: {CHAT_ID}")
             return
         if not LAB_URL:
-            send_tg("⚠️ رابط اللاب غير موجود.")
+            send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
     else:  # cloud_run_only
         if not LAB_URL:
-            send_tg("⚠️ رابط الكونسول غير موجود.")
+            send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
 
-    send_tg("🚀 بدء المهمة...")
-    send_admin(f"🔔 مهمة أتمتة جديدة ({MODE})\nالمستخدم: {CHAT_ID}\nالرابط: {LAB_URL}")
+    # رسالة ترحيبية ومطمئنة للمستخدم، وتم إلغاء تنبيه المشرف لعدم إزعاجه عند بدء العمليات الناجحة
+    send_tg("🚀 بدء المهمة... جاري بدء عملية الإنشاء التلقائي لحسابك، يرجى الانتظار ولا تقلق سنقوم بتهيئة كل شيء من أجلك وبأفضل دقة ممكنة ✨")
 
     ext_path = None
     if MODE == "full_automation":
         ext_path = await setup_compiled_buster()
         if not ext_path:
+            send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
             return
 
@@ -595,8 +598,6 @@ async def run():
     page = None
 
     async with async_playwright() as p:
-        # استخدام headless=True بشكل جيد على Windows بدون الحاجة لبيئة عرض (display server)
-        # لا نستخدم --no-sandbox و--disable-gpu لأنها مخصصة لـ Linux فقط
         launch_args = [
             "--disable-blink-features=AutomationControlled",
             "--start-maximized",
@@ -638,13 +639,13 @@ async def run():
 
                 state = await detect_page_state(page)
                 if state == "EXPIRED_ACCOUNT":
-                    send_tg("⚠️ حسابك تالف. يرجى تحديث الكوكيز.")
+                    send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
                     send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
                     try: await page.screenshot(path="expired.png"); send_admin(f"حساب تالف - {CHAT_ID}", "expired.png")
                     except: pass
                     return
                 if state == "INVALID_LAB":
-                    send_tg("⚠️ رابط اللاب غير صالح.")
+                    send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
                     send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
                     try: await page.screenshot(path="invalid.png"); send_admin(f"لاب غير موجود - {CHAT_ID}", "invalid.png")
                     except: pass
@@ -660,7 +661,7 @@ async def run():
 
                     state2 = await detect_page_state(page)
                     if state2 == "EXPIRED_ACCOUNT":
-                        send_tg("⚠️ حسابك تالف. يرجى تحديث الكوكيز.")
+                        send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
                         return
 
@@ -669,19 +670,17 @@ async def run():
                         email, password = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
                     else:
-                        send_tg("❌ فشل الإنشاء (Credits).")
+                        send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
                         return
                 else:
                     s3 = await detect_page_state(page)
+                    send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
                     if s3 == "EXPIRED_ACCOUNT":
-                        send_tg("⚠️ حسابك تالف.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
                     elif s3 == "INVALID_LAB":
-                        send_tg("⚠️ رابط اللاب غير صالح.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
                     else:
-                        send_tg("❌ لم يُعثر على زر Start Lab.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
                     try: await page.screenshot(path="no_start.png"); send_admin(f"فشل Start Lab - {CHAT_ID}", "no_start.png")
                     except: pass
@@ -708,18 +707,18 @@ async def run():
 
                 await run_cloud_run_deploy_flow(page, console_link)
             else:
-                send_tg("❌ لم يتم الحصول على رابط كونسول صالح.")
+                send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
                 send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
 
         except LoginRequiredError:
-            send_tg("⚠️ الرابط منتهي ويطلب تسجيل الدخول! تم إلغاء طلبك.")
+            send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
             try:
                 await page.screenshot(path="login_required.png")
                 send_admin(f"🔴 يطلب تسجيل دخول - {CHAT_ID}", "login_required.png")
             except: pass
         except Exception as e:
-            send_tg("❌ حدث خطأ أثناء المعالجة أو فشل النشر.")
+            send_tg("❌ فشل في إكمال العملية، سيتم إرسال المشكلة للمشرف لحلها.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
             try:
                 if page:
@@ -728,7 +727,7 @@ async def run():
                 else:
                     send_admin(f"🔥 خطأ: {e}\nمستخدم: {CHAT_ID}")
             except:
-                send_admin(f"🔥 خطأ: {e}")
+                pass
         finally:
             await asyncio.sleep(5)
             await context.close()
