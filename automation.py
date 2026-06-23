@@ -9,11 +9,7 @@ import json
 import base64
 from playwright.async_api import async_playwright
 
-# إصلاح مشكلة asyncio على Windows (ProactorEventLoop قد تسبب خطأ مع Playwright)
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-# ==========================================
+=======================
 # الإعدادات - تُقرأ من متغيرات البيئة
 # ==========================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", ""))
