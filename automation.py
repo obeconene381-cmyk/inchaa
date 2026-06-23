@@ -9,7 +9,7 @@ import json
 import base64
 from playwright.async_api import async_playwright
 
-=======================
+#=======================
 # الإعدادات - تُقرأ من متغيرات البيئة
 # ==========================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", ""))
