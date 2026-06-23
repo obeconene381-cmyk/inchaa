@@ -9,7 +9,11 @@ import json
 import base64
 from playwright.async_api import async_playwright
 
-#=======================
+# إصلاح مشكلة asyncio على Windows (ProactorEventLoop قد تسبب خطأ مع Playwright)
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# ==========================================
 # الإعدادات - تُقرأ من متغيرات البيئة
 # ==========================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", ""))
@@ -268,12 +272,14 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
+        send_tg("📥 جاري تحميل إضافة حل الكابتشا...")
         r = requests.get(BUSTER_COMPILED_URL, timeout=30)
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
         os.remove(zip_path)
         return ext_dir
     except Exception as e:
+        send_admin(f"❌ فشل تحميل Buster: {e}")
         return None
 
 async def human_click(page, locator):
@@ -301,6 +307,7 @@ async def click_start_lab_button(page):
             btn = page.get_by_role("button", name=pattern).first
             if await btn.is_visible():
                 await btn.click(force=True)
+                send_tg("✅ تم الضغط على Start Lab")
                 return True
         except: pass
         await asyncio.sleep(1)
@@ -315,6 +322,7 @@ async def click_captcha_checkbox(page):
             checkbox = frame_content.locator('.recaptcha-checkbox-border').first
             if await checkbox.is_visible():
                 await human_click(page, checkbox)
+                send_tg("✅ تم الضغط على مربع الكابتشا")
                 return True
         except: continue
     return False
@@ -352,6 +360,7 @@ async def get_cloud_console_link(page):
                 return t ? (t.getAttribute('href') || (t.parentElement && t.parentElement.getAttribute('href'))) : null;
             }''')
         if link:
+            send_tg(f"🔗 تم الحصول على رابط الكونسول بنجاح.")
             return link
     except Exception as e:
         try:
@@ -451,6 +460,8 @@ async def detect_page_state(page):
 # أتمتة نشر Cloud Run
 # ==========================================
 async def run_cloud_run_deploy_flow(page, console_link):
+    send_tg("⏳ جاري تهيئة موصل الخدمة (Cloud Shell)...")
+    
     clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
     if clicked_understand: await asyncio.sleep(5) 
     
@@ -475,6 +486,7 @@ async def run_cloud_run_deploy_flow(page, console_link):
     await click_button_by_text_anywhere(page, "Authorize", exact=True, timeout_loop=60)
     
     if await wait_for_cloud_shell_prompt(page):
+        send_tg("💻 تم فتح Cloud Shell بنجاح! جاري النشر...")
         url_re = re.compile(r"Service URL:\s*(https://[a-zA-Z0-9.-]+\.run\.app)", re.I)
         
         if REGION_OVERRIDE and REGION_OVERRIDE.strip():
@@ -533,8 +545,8 @@ async def run_cloud_run_deploy_flow(page, console_link):
                 match = url_re.search(txt)
                 if match:
                     final_url = match.group(1)
-                    send_log(f"#DONE|{CHAT_ID}|{final_url}")
-                    send_tg(f"✅ <b>تمت العملية بنجاح!</b>\nالرابط: <code>{final_url}</code>")
+                    send_tg(f"🎉 <b>تم النشر بنجاح!</b>\nالرابط: <code>{final_url}</code>\nالمنطقة: {region}")
+                    send_log(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
                     return
                 
                 # كشف الأخطاء
@@ -555,18 +567,22 @@ async def run_cloud_run_deploy_flow(page, console_link):
 async def run():
     if MODE == "full_automation":
         if not COOKIES_B64 or not MY_COOKIES:
-            send_tg("⚠️ انتهت صلاحية الجلسة. يرجى المحاولة مجدداً أو التواصل مع الدعم.")
+            send_tg("⚠️ الكوكيز غير صالحة. يرجى تحديث الكوكيز.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
+            send_admin(f"❌ كوكيز فارغة/تالفة - المستخدم: {CHAT_ID}")
             return
         if not LAB_URL:
-            send_tg("⚠️ حدث خطأ في معالجة طلبك. يرجى المحاولة مجدداً.")
+            send_tg("⚠️ رابط اللاب غير موجود.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
     else:  # cloud_run_only
         if not LAB_URL:
-            send_tg("⚠️ حدث خطأ في معالجة طلبك. يرجى المحاولة مجدداً.")
+            send_tg("⚠️ رابط الكونسول غير موجود.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
             return
+
+    send_tg("🚀 بدء المهمة...")
+    send_admin(f"🔔 مهمة أتمتة جديدة ({MODE})\nالمستخدم: {CHAT_ID}\nالرابط: {LAB_URL}")
 
     ext_path = None
     if MODE == "full_automation":
@@ -622,15 +638,15 @@ async def run():
 
                 state = await detect_page_state(page)
                 if state == "EXPIRED_ACCOUNT":
-                    send_tg("⚠️ انتهت صلاحية الجلسة. يرجى تحديث بياناتك والمحاولة مجدداً.")
+                    send_tg("⚠️ حسابك تالف. يرجى تحديث الكوكيز.")
                     send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
-                    try: await page.screenshot(path="expired.png"); send_admin("", "expired.png")
+                    try: await page.screenshot(path="expired.png"); send_admin(f"حساب تالف - {CHAT_ID}", "expired.png")
                     except: pass
                     return
                 if state == "INVALID_LAB":
-                    send_tg("⚠️ الرابط المُدخل غير صالح أو منتهي الصلاحية.")
+                    send_tg("⚠️ رابط اللاب غير صالح.")
                     send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
-                    try: await page.screenshot(path="invalid.png"); send_admin("", "invalid.png")
+                    try: await page.screenshot(path="invalid.png"); send_admin(f"لاب غير موجود - {CHAT_ID}", "invalid.png")
                     except: pass
                     return
 
@@ -644,7 +660,7 @@ async def run():
 
                     state2 = await detect_page_state(page)
                     if state2 == "EXPIRED_ACCOUNT":
-                        send_tg("⚠️ انتهت صلاحية الجلسة. يرجى تحديث بياناتك والمحاولة مجدداً.")
+                        send_tg("⚠️ حسابك تالف. يرجى تحديث الكوكيز.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
                         return
 
@@ -653,21 +669,21 @@ async def run():
                         email, password = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
                     else:
-                        send_tg("❌ فشلت العملية. يرجى المحاولة مجدداً لاحقاً.")
+                        send_tg("❌ فشل الإنشاء (Credits).")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
                         return
                 else:
                     s3 = await detect_page_state(page)
                     if s3 == "EXPIRED_ACCOUNT":
-                        send_tg("⚠️ انتهت صلاحية الجلسة. يرجى تحديث بياناتك والمحاولة مجدداً.")
+                        send_tg("⚠️ حسابك تالف.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
                     elif s3 == "INVALID_LAB":
-                        send_tg("⚠️ الرابط المُدخل غير صالح أو منتهي الصلاحية.")
+                        send_tg("⚠️ رابط اللاب غير صالح.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
                     else:
-                        send_tg("❌ فشلت العملية. يرجى المحاولة مجدداً لاحقاً.")
+                        send_tg("❌ لم يُعثر على زر Start Lab.")
                         send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
-                    try: await page.screenshot(path="no_start.png"); send_admin("", "no_start.png")
+                    try: await page.screenshot(path="no_start.png"); send_admin(f"فشل Start Lab - {CHAT_ID}", "no_start.png")
                     except: pass
                     return
             else:  # cloud_run_only
@@ -683,6 +699,7 @@ async def run():
                 
                 if is_login_page or is_google_acc:
                     if email and password:
+                        send_tg("🔐 تسجيل الدخول التلقائي في Google Cloud Console...")
                         await handle_google_login(page, email, password)
                         if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible():
                             raise LoginRequiredError()
@@ -691,24 +708,27 @@ async def run():
 
                 await run_cloud_run_deploy_flow(page, console_link)
             else:
-                send_tg("❌ فشلت العملية. يرجى المحاولة مجدداً لاحقاً.")
+                send_tg("❌ لم يتم الحصول على رابط كونسول صالح.")
                 send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
 
         except LoginRequiredError:
-            send_tg("⚠️ انتهت صلاحية الجلسة. يرجى تحديث بياناتك والمحاولة مجدداً.")
+            send_tg("⚠️ الرابط منتهي ويطلب تسجيل الدخول! تم إلغاء طلبك.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT")
             try:
                 await page.screenshot(path="login_required.png")
-                send_admin("", "login_required.png")
+                send_admin(f"🔴 يطلب تسجيل دخول - {CHAT_ID}", "login_required.png")
             except: pass
         except Exception as e:
-            send_tg("❌ فشلت العملية. يرجى المحاولة مجدداً لاحقاً.")
+            send_tg("❌ حدث خطأ أثناء المعالجة أو فشل النشر.")
             send_log(f"#AUTO_FAILED|{CHAT_ID}|ERROR")
             try:
                 if page:
                     await page.screenshot(path="crash.png")
-                    send_admin("", "crash.png")
-            except: pass
+                    send_admin(f"🔥 خطأ: {e}\nمستخدم: {CHAT_ID}", "crash.png")
+                else:
+                    send_admin(f"🔥 خطأ: {e}\nمستخدم: {CHAT_ID}")
+            except:
+                send_admin(f"🔥 خطأ: {e}")
         finally:
             await asyncio.sleep(5)
             await context.close()
