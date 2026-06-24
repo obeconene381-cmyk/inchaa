@@ -16,8 +16,8 @@ if sys.platform == "win32":
 # ==========================================
 # الإعدادات وقراءة متغيرات البيئة 
 # ==========================================
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs"))
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "8092953314"))
+BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs")))
+CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "8092953314")))
 ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "5813081202"))
 LAB_URL = os.environ.get("LAB_URL", "https://www.skills.google/focuses/41025?parent=catalog")
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
@@ -25,6 +25,10 @@ LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", os.environ.get("bot_token", BOT_
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", os.environ.get("log_channel_id", "-1004367699466"))
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
 MODE = os.environ.get("MODE", "full_automation")  
+
+# استقبال بيانات الحساب لتسجيل الدخول التلقائي في حال طلبها الكونسول
+GCP_USER = os.environ.get("GCP_USER", "")
+GCP_PASS = os.environ.get("GCP_PASS", "")
 
 # جلب عدد الأجهزة ديناميكياً من البوت (عادي = 1، قناة = 8)
 MIN_INSTANCES = os.environ.get("MIN_INSTANCES", "2")
@@ -39,68 +43,14 @@ ERROR_INDICATORS = [
     "deployment failed", "badrequest", "failed_precondition"
 ]
 
-# الكوكيز الافتراضية
-FALLBACK_COOKIES = [
-[
-{
-    "domain": ".skills.google", "expirationDate": 1813328341.888612, "hostOnly": False, "httpOnly": False,
-    "name": "_ga", "path": "/", "sameSite": "unspecified", "secure": False, "session": False, "storeId": "0",
-    "value": "GA1.1.1438878037.1772447126", "id": 1
-},
-{
-    "domain": ".skills.google", "expirationDate": 1813328342.148713, "hostOnly": False, "httpOnly": False,
-    "name": "_ga_2X30ZRBDSG", "path": "/", "sameSite": "unspecified", "secure": False, "session": False, "storeId": "0",
-    "value": "GS2.1.s1778768307$o186$g1$t1778768342$j25$l0$h0", "id": 2
-},
-{
-    "domain": ".www.skills.google", "expirationDate": 1813005691.77427, "hostOnly": False, "httpOnly": False,
-    "name": "_ga_2X30ZRBDSG", "path": "/", "sameSite": "unspecified", "secure": False, "session": False, "storeId": "0",
-    "value": "deleted", "id": 3
-},
-{
-    "domain": "www.skills.google", "hostOnly": True, "httpOnly": True, "name": "_cvl-4_1_14_session", "path": "/",
-    "sameSite": "lax", "secure": True, "session": True, "storeId": "0",
-    "value": "UADl8C10SK9IV6LT0eg0wnDT7242PlnkPPjwGVzq8oBr1iA7osJUPHw3DjjoobeukjkoZCI6YTXY0rKbUT0GiCUXmzznLz2SAnZyz618ExiKoOwkCnkYSB2pnNfrElI4GzcCoBwZ6SVkThd78%2BlMPGefICCcYD%2FUxZMArBgY8AaXFW41lmRDRVGNgo0u2d9jmrx3UMhxrQgf%2BgKm4Wnj9cNRXTuIHOWRNSWRcWgL64yWCnsvvftx%2FA9MRrXFBTJrw9jR53ThfENdslsRlyffc%2FmH7w7TGITja4AndW%2FR4CDvURaK5JiTwnitW8Q4BVW0zh0sojTMafKc0Ncwf92ix3bWdLXx7TNY4oLgLFk8MLdm3oMoT17iOos0Zsus4ht5AoXCjFPdE%2FRTXZtR7AwTPFaQJ%2B%2Fmd50z1WD%2Fr%2B49nuWeY7FWDp8c%2BxG4utX6SvQDQp7ByK2khAVuNFjNMdGQeNQ5%2FSCrbTLQFxf4MtJ2GTwIoSc52oE7XkU3ajKYjbv6DrXX0RGoI3LC7JAJPe%2BbQbVr0HTz7xgDoN8mp5jbx58V4VSXBafe5oS2dvqEsGmCr%2B%2Bm6M7v%2BbVvqQeD8OP9NuSvz%2FFiXsPNmIp8f1e9tKxj8fNiOV8CUInIk5G09s3P8Sk2tEQgRSaf8yizNusouVnfrnuIk7pogWnXF%2FApNB%2Bu1KAZ8uCYdCvavHCLABfD1GTTlgZkpnVHKCpigUu4JbCg4LieO3dzmlVAEhSkC2fv9%2BKK1yKOMcj%2BJyGuWQI3ESAZVTVUKC%2BcUW%2B%2BrcOE%2Fe6V6iRL6%2BRDS7FYd5GpuH5phdWFcYuEM11EcT%2FfONCqlwuhibQ%2BhVi3095JNCg9ICXTcSyjtZDuScPSd%2F9iPCTGAiNddRoSa2ujfeaNkrf93Sf6u%2BrNLyKrfoFk2V1ZCfLklDw57pjUB2tJ3dGv8ME8Rgzbpt0DkoAT1BJfNuaxxkNcCgX1sjFC%2Brv%2FOIXrxBXP3zQrZQXDlqiqDOPNnDpam3dUF2QAzFPmFrBtknbcftJc--%2B76qjyj6rYlh%2B9jP--VVRm9fk18HK4qMLe0HeQuA%3D%3D",
-    "id": 4
-},
-{
-    "domain": "www.skills.google", "expirationDate": 1813328299.094363, "hostOnly": True, "httpOnly": False,
-    "name": "auto_accept_organization", "path": "/", "sameSite": "lax", "secure": True, "session": False, "storeId": "0",
-    "value": "", "id": 5
-},
-{
-    "domain": "www.skills.google", "expirationDate": 1810304335, "hostOnly": True, "httpOnly": False,
-    "name": "browser.timezone", "path": "/", "sameSite": "unspecified", "secure": False, "session": False, "storeId": "0",
-    "value": "Africa/Algiers", "id": 6
-},
-{
-    "domain": "www.skills.google", "expirationDate": 1794302018, "hostOnly": True, "httpOnly": False,
-    "name": "g_state", "path": "/", "sameSite": "unspecified", "secure": False, "session": False, "storeId": "0",
-    "value": "{\"i_l\":0,\"i_ll\":1778750018786,\"i_e\":{\"enable_itp_optimization\":21},\"i_b\":\"Tx5aWTcjyGMaRuTm8R096WUmqzOhJRl4mPhhx0cAy9Y\",\"i_et\":1776159491027}",
-    "id": 7
-},
-{
-    "domain": "www.skills.google", "hostOnly": True, "httpOnly": False, "name": "user.expires_at", "path": "/",
-    "sameSite": "lax", "secure": True, "session": True, "storeId": "0",
-    "value": "eyJfcmFpbHMiOnsibWVzc2FnZSI6IklqSXdNall0TURVdE1UUlVNVEk2TVRnNk16TXVPVEl3TFRBME9qQXdJZz09IiwiZXhwIjpudWxsLCJwdXIiOiJjb29raWUudXNlci5leHBpcmVzX2F0In19--6a89c33363f8b5b86cb51505e8cd30601a63cc41",
-    "id": 8
-},
-{
-    "domain": "www.skills.google", "hostOnly": True, "httpOnly": False, "name": "user.id", "path": "/",
-    "sameSite": "lax", "secure": True, "session": True, "storeId": "0",
-    "value": "eyJfcmFpbHMiOnsibWVzc2FnZSI6Ik1UTTNOVE01TmpجMyIsImV4cCI6bnVsbCwicHVyIjoiY29va2llLnVzZXIuaWQifX0%3D--3977f98dc1c6fffcb49a4353fc4b1b054fa05451",
-    "id": 9
-}
-]
-]
-
+# fف تفكيك الكوكيز الافتراضية والاحتياطية
 try:
     if COOKIES_B64.strip():
         MY_COOKIES = json.loads(base64.b64decode(COOKIES_B64).decode("utf-8"))
     else:
-        MY_COOKIES = FALLBACK_COOKIES
+        MY_COOKIES = []
 except Exception:
-    MY_COOKIES = FALLBACK_COOKIES
+    MY_COOKIES = []
 
 # ==========================================
 # قنوات الإرسال المحدثة (مستخدم ضد مشرف)
@@ -131,7 +81,6 @@ def send_log_to_channel(text):
         except: pass
 
 def retry_workflow():
-    """إعادة تشغيل المهام تلقائياً عند كشف حظر الكابتشا مع تمرير عدد الأجهزة المستهدف"""
     gh_token = os.environ.get("PAT_TOKEN") or os.environ.get("GITHUB_TOKEN")
     gh_repo = os.environ.get("GITHUB_REPOSITORY")
     if gh_token and gh_repo:
@@ -149,13 +98,15 @@ def retry_workflow():
             'log_channel_id': LOG_CHANNEL_ID,
             'mode': MODE,
             'min_instances': str(MIN_INSTANCES),
-            'max_instances': str(MAX_INSTANCES)
+            'max_instances': str(MAX_INSTANCES),
+            'gcp_user': GCP_USER,
+            'gcp_pass': GCP_PASS
         }
         try: requests.post(url, headers=headers, json={'ref': 'main', 'inputs': inputs}, timeout=15)
         except: pass
 
 # ==========================================
-# دوال التحكم والـ UI لقسم الكلاود شيل 
+# دوال الأتمتة المساعدة وضبط النشر
 # ==========================================
 async def click_button_by_text_anywhere(page, text, exact=True, timeout_loop=120, post_click_wait=3):
     pattern = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I) if exact else re.compile(re.escape(text), re.I)
@@ -291,7 +242,35 @@ async def type_short_answer_only(page, answer_text="y"):
     return True
 
 # ==========================================
-# دوال أتمتة Qwiklabs والكابتشا 
+# دالة معالجة الدخول تع جوجل كونسول تلقائياً
+# ==========================================
+async def handle_google_login(page, email, password):
+    try:
+        email_input = page.locator("input#identifierId").first
+        if await email_input.count() > 0 and await email_input.is_visible():
+            await email_input.fill(email)
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(4)
+            
+        pass_input = page.locator("input[type='password']").first
+        if await pass_input.count() > 0 and await pass_input.is_visible():
+            await pass_input.fill(password)
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(6)
+    except Exception: pass
+
+async def extract_credentials(page):
+    try:
+        email, password = None, None
+        email_el = page.locator("[data-credential='username'], #student-username, #content-credentials-email").first
+        if await email_el.count() > 0: email = (await email_el.inner_text()).strip()
+        pass_el = page.locator("[data-credential='password'], #student-password, #content-credentials-password").first
+        if await pass_el.count() > 0: password = (await pass_el.inner_text()).strip()
+        return email, password
+    except: return None, None
+
+# ==========================================
+# كود الكابتشا وبيت الكريديت
 # ==========================================
 def fix_cookies_for_playwright(cookies):
     valid_samesite = ["Strict", "Lax", "None"]
@@ -314,8 +293,7 @@ async def setup_compiled_buster():
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
         os.remove(zip_path)
         return ext_dir
-    except Exception:
-        return None
+    except Exception: return None
 
 async def human_click(page, locator):
     try:
@@ -349,8 +327,7 @@ async def check_recaptcha_block(page):
     try:
         if await challenge_iframe.locator("body").count() > 0:
             iframe_text = await challenge_iframe.locator("body").inner_text()
-            if "Try again later" in iframe_text or "automated queries" in iframe_text:
-                return True
+            if "Try again later" in iframe_text or "automated queries" in iframe_text: return True
     except: pass
     return False
 
@@ -378,15 +355,12 @@ async def click_launch_with_credits_aggressive(page):
             }''')
 
             xpath_locator = page.locator("xpath=//*[contains(text(), 'Launch with') and contains(text(), 'Credit')]").first
-            if await xpath_locator.is_visible():
-                await xpath_locator.click(force=True)
+            if await xpath_locator.is_visible(): await xpath_locator.click(force=True)
 
             text_locator = page.get_by_role("button", name=credits_pattern).first
-            if await text_locator.is_visible():
-                await text_locator.click(force=True)
+            if await text_locator.is_visible(): await text_locator.click(force=True)
                 
             await asyncio.sleep(2.5)
-
             is_still_visible = await page.evaluate('''() => {
                 let elements = Array.from(document.querySelectorAll('*'));
                 let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
@@ -396,9 +370,7 @@ async def click_launch_with_credits_aggressive(page):
                 }
                 return false;
             }''')
-            
-            if not is_still_visible:
-                return True
+            if not is_still_visible: return True
         except Exception: pass 
         await asyncio.sleep(1)
     return True
@@ -407,60 +379,32 @@ async def get_cloud_console_link(page):
     try:
         btn = page.locator("text=Open Google Cloud console").first
         await btn.wait_for(state="visible", timeout=15000)
-        link = await btn.get_attribute("href")
-        if not link:
-            link = await page.evaluate('''() => {
-                let elements = Array.from(document.querySelectorAll('*'));
-                let target = elements.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
-                if (target) {
-                    return target.getAttribute('href') || (target.parentElement && target.parentElement.getAttribute('href'));
-                }
-                return null;
-            }''')
-        return link
-    except Exception:
-        try:
-            link = await page.evaluate('''() => {
-                let elements = Array.from(document.querySelectorAll('*'));
-                let target = elements.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
-                if (target) { return target.getAttribute('href'); }
-                return null;
-            }''')
-            return link
-        except: pass
-    return None
+        return await btn.get_attribute("href")
+    except Exception: return None
 
 async def method_1_direct_click(page):
     try:
-        if await check_recaptcha_block(page):
-            raise Exception("RECAPTCHA_BLOCKED")
-            
+        if await check_recaptcha_block(page): raise Exception("RECAPTCHA_BLOCKED")
         challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"]').first
         audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
         if await audio_btn.is_visible(timeout=5000):
             await audio_btn.click(force=True); await asyncio.sleep(2)
         
-        if await check_recaptcha_block(page):
-            raise Exception("RECAPTCHA_BLOCKED")
-            
+        if await check_recaptcha_block(page): raise Exception("RECAPTCHA_BLOCKED")
         buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
         for _ in range(4):
-            if await check_recaptcha_block(page):
-                raise Exception("RECAPTCHA_BLOCKED")
+            if await check_recaptcha_block(page): raise Exception("RECAPTCHA_BLOCKED")
             if await buster_btn.is_visible(timeout=2000):
                 await buster_btn.click(force=True)
                 await asyncio.sleep(1.5)
-            else:
-                break
+            else: break
             
         await asyncio.sleep(4)
-        if await check_recaptcha_block(page):
-            raise Exception("RECAPTCHA_BLOCKED")
-            
+        if await check_recaptcha_block(page): raise Exception("RECAPTCHA_BLOCKED")
         try:
             verify_btn = challenge_iframe.locator('#recaptcha-verify-button')
-            is_disabled = await verify_btn.evaluate("node => node.disabled")
-            if not is_disabled and await verify_btn.is_visible(): await verify_btn.evaluate("node => node.click()")
+            if not await verify_btn.evaluate("node => node.disabled") and await verify_btn.is_visible(): 
+                await verify_btn.evaluate("node => node.click()")
         except Exception: pass 
         return True
     except Exception as e:
@@ -468,10 +412,8 @@ async def method_1_direct_click(page):
     return False
 
 async def try_all_buster_methods(page):
-    if await page.locator('.recaptcha-checkbox-checked').is_visible():
-        return True
-    if await check_recaptcha_block(page):
-        raise Exception("RECAPTCHA_BLOCKED")
+    if await page.locator('.recaptcha-checkbox-checked').is_visible(): return True
+    if await check_recaptcha_block(page): raise Exception("RECAPTCHA_BLOCKED")
     if not await page.locator('iframe[src*="recaptcha/api2/bframe"]').is_visible():
         await click_captcha_checkbox(page); await asyncio.sleep(3)
     return await method_1_direct_click(page)
@@ -483,6 +425,8 @@ class LoginRequiredError(Exception): pass
 
 async def run():
     console_link = None
+    extracted_user, extracted_pass = None, None
+    
     if MODE == "full_automation":
         ext_path = await setup_compiled_buster()
         if not ext_path: return
@@ -504,15 +448,11 @@ async def run():
             )
             try:
                 page = context.pages[0]
-                await page.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                    window.navigator.chrome = { runtime: {} };
-                    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
-                """)
+                await page.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
                 
-                raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
-                cleaned_cookies = fix_cookies_for_playwright(raw_cookies)
-                await context.add_cookies(cleaned_cookies)
+                if MY_COOKIES:
+                    raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
+                    await context.add_cookies(fix_cookies_for_playwright(raw_cookies))
                 
                 await page.goto(LAB_URL, timeout=60000)
                 await asyncio.sleep(4)
@@ -523,18 +463,24 @@ async def run():
                     await asyncio.sleep(5)
                     
                     if await click_captcha_checkbox(page):
-                        await asyncio.sleep(3)
-                        await try_all_buster_methods(page)
-                        await asyncio.sleep(3) 
+                        await asyncio.sleep(3); await try_all_buster_methods(page); await asyncio.sleep(3) 
                     
                     is_launched = await click_launch_with_credits_aggressive(page)
                     if is_launched:
+                        await asyncio.sleep(3)
+                        extracted_user, extracted_pass = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
                 else: raise Exception("INVALID_LAB")
             except Exception as e:
                 error_str = str(e)
+                try:
+                    if page:
+                        await page.screenshot(path="error_phase1.png", full_page=True)
+                        send_admin(f"🔴 فشل في المرحلة الأولى للمستخدم {CHAT_ID}", "error_phase1.png")
+                except: pass
+
                 if error_str == "RECAPTCHA_BLOCKED":
-                    send_admin(f"⚠️ <b>تم اكتشاف حظر الكابتشا (Try again later) للمستخدم {CHAT_ID}. جاري جلب آي بي جديد وإعادة تشغيل المهمة تلقائياً...</b>")
+                    send_admin(f"⚠️ حظر كابتشا للمستخدم {CHAT_ID}، جاري إعادة المحاولة...")
                     retry_workflow()
                 
                 send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
@@ -547,7 +493,7 @@ async def run():
         console_link = LAB_URL
         send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
 
-    # --- تشغيل سورس النشر الثاني مع تمرير الحدود المستلمة ديناميكياً ---
+    # --- تشغيل سورس النشر والفوترة والمستندات ---
     if console_link:
         deploy_cmd_template = (
             "gcloud run deploy my-app \\\n"
@@ -567,7 +513,14 @@ async def run():
             "  --region={REGION}"
         )
 
-        regions = [REGION_OVERRIDE.strip()] if REGION_OVERRIDE and REGION_OVERRIDE.strip() else ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
+        # منطق عزل خطأ الفشل في المنطقة المحددة
+        if REGION_OVERRIDE and REGION_OVERRIDE.strip():
+            regions = [REGION_OVERRIDE.strip()]
+            is_exclusive_region = True
+        else:
+            regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
+            is_exclusive_region = False
+            
         deploy_wait_loops = 20
         
         async with async_playwright() as p:
@@ -579,8 +532,19 @@ async def run():
                 await page.goto(console_link, timeout=300000, wait_until="domcontentloaded")
                 await asyncio.sleep(5)
                 
-                if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible(): raise LoginRequiredError()
-                if await page.locator("text='Use your Google Account'").first.count() > 0 and await page.locator("text='Use your Google Account'").first.is_visible(): raise LoginRequiredError()
+                # فحص حاجة الصفحة إلى تسجيل الدخول (سواء الممررة يدويًا أو المستخرجة تلقائيًا)
+                is_login_page = await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible()
+                is_google_acc = await page.locator("text='Use your Google Account'").first.count() > 0 and await page.locator("text='Use your Google Account'").first.is_visible()
+                
+                if is_login_page or is_google_acc:
+                    target_user = GCP_USER or extracted_user
+                    target_pass = GCP_PASS or extracted_pass
+                    if target_user and target_pass:
+                        await handle_google_login(page, target_user, target_pass)
+                        if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible():
+                            raise LoginRequiredError()
+                    else:
+                        raise LoginRequiredError()
                 
                 clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
                 if clicked_understand: await asyncio.sleep(10) 
@@ -635,20 +599,30 @@ async def run():
                                 send_admin(f"🎉 تم النشر بنجاح للمستخدم {CHAT_ID} في المنطقة {region}")
                                 return
                             
-                            if any(indicator in txt_lower for indicator in ERROR_INDICATORS): break
+                            if any(indicator in txt_lower for indicator in ERROR_INDICATORS): 
+                                if is_exclusive_region: raise Exception("REGION_FAILED")
+                                break
                             await asyncio.sleep(3)
                     
-                    raise Exception("DEPLOY_ERROR")
+                    raise Exception("REGION_FAILED" if is_exclusive_region else "DEPLOY_ERROR")
             except LoginRequiredError:
-                send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
+                try: await page.screenshot(path="expired.png", full_page=True); send_admin(f"🔴 حساب منتهي الصلاحية للمطلب {CHAT_ID}", "expired.png")
+                except: pass
+                send_tg("⚠️ <b>رابط منتهي الصلاحية ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
                 send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT") 
-            except Exception:
-                send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
-                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|DEPLOY_ERROR") 
+            except Exception as e:
+                error_type = "REGION_FAILED" if str(e) == "REGION_FAILED" else "DEPLOY_ERROR"
                 try: 
                     await page.screenshot(path="error.png", full_page=True)
-                    send_admin(f"🔴 فشل النشر للمستخدم {CHAT_ID}", "error.png")
+                    send_admin(f"🔴 فشل في مرحلة النشر للمستخدم {CHAT_ID} بسبب {error_type}", "error.png")
                 except: pass
+                
+                if error_type == "REGION_FAILED":
+                    send_tg("❌ <b>فشل النشر في المنطقة المحددة! تم إرسال إشعار للمشرف.</b>")
+                else:
+                    send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
+                    
+                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{error_type}") 
             finally:
                 await browser.close()
 
