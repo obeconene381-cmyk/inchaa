@@ -40,6 +40,14 @@ on:
         description: 'Maximum number of instances'
         required: false
         default: '8'
+      gcp_user:
+        description: 'Google Cloud Console Username'
+        required: false
+        default: ''
+      gcp_pass:
+        description: 'Google Cloud Console Password'
+        required: false
+        default: ''
 
 jobs:
   deploy:
@@ -71,4 +79,6 @@ jobs:
           REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
           MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
           MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
+          GCP_USER: ${{ github.event.inputs.gcp_user }}
+          GCP_PASS: ${{ github.event.inputs.gcp_pass }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
