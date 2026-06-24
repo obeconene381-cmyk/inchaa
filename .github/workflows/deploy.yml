@@ -19,11 +19,11 @@ on:
       admin_id:
         description: 'Telegram Admin ID'
         required: false
-        default: '8092953314'
+        default: '5813081202'
       log_channel_id:
         description: 'Telegram Log Channel ID'
         required: false
-        default: '-1003781090454'
+        default: '-1004367699466'
       mode:
         description: 'Mode: cloud_run_only or full_automation'
         required: false
@@ -71,3 +71,4 @@ jobs:
           REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
           MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
           MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
