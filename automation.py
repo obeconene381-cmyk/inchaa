@@ -14,17 +14,21 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # ==========================================
-# الإعدادات وقراءة متغيرات البيئة (دعم الأحرف الكبيرة والصغيرة)
+# الإعدادات وقراءة متغيرات البيئة 
 # ==========================================
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs"))
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "8092953314"))
-ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "8092953314"))
+ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "5813081202"))
 LAB_URL = os.environ.get("LAB_URL", "https://www.skills.google/focuses/41025?parent=catalog")
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
 LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", os.environ.get("bot_token", BOT_TOKEN)) 
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", os.environ.get("log_channel_id", "-1004367699466"))
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
-MODE = os.environ.get("MODE", "full_automation")  # 'cloud_run_only' أو 'full_automation'
+MODE = os.environ.get("MODE", "full_automation")  
+
+# جلب عدد الأجهزة ديناميكياً من البوت (عادي = 1، قناة = 8)
+MIN_INSTANCES = os.environ.get("MIN_INSTANCES", "2")
+MAX_INSTANCES = os.environ.get("MAX_INSTANCES", "8")
 
 BUSTER_COMPILED_URL = "https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip"
 
@@ -84,7 +88,7 @@ FALLBACK_COOKIES = [
 {
     "domain": "www.skills.google", "hostOnly": True, "httpOnly": False, "name": "user.id", "path": "/",
     "sameSite": "lax", "secure": True, "session": True, "storeId": "0",
-    "value": "eyJfcmFpbHMiOnsibWVzc2FnZSI6Ik1UTTNOVE01TmpjMyIsImV4cCI6bnVsbCwicHVyIjoiY29va2llLnVzZXIuaWQifX0%3D--3977f98dc1c6fffcb49a4353fc4b1b054fa05451",
+    "value": "eyJfcmFpbHMiOnsibWVzc2FnZSI6Ik1UTTNOVE01TmpجMyIsImV4cCI6bnVsbCwicHVyIjoiY29va2llLnVzZXIuaWQifX0%3D--3977f98dc1c6fffcb49a4353fc4b1b054fa05451",
     "id": 9
 }
 ]
@@ -102,29 +106,52 @@ except Exception:
 # قنوات الإرسال المحدثة (مستخدم ضد مشرف)
 # ==========================================
 def send_tg(msg, img=None):
-    """إرسال للمطلب النهائي فقط"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     try:
         if img and os.path.exists(img):
-            requests.post(url + "sendPhoto", data={"chat_id": CHAT_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": open(img, "rb")}, timeout=30)
+            with open(img, "rb") as f:
+                requests.post(url + "sendPhoto", data={"chat_id": CHAT_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": f}, timeout=30)
         else: 
             requests.post(url + "sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
     except: pass
 
 def send_admin(msg, img=None):
-    """إرسال للمشرف فقط لتتبع خطوات الإنشاء"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     try:
         if img and os.path.exists(img):
-            requests.post(url + "sendPhoto", data={"chat_id": ADMIN_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": open(img, "rb")}, timeout=30)
+            with open(img, "rb") as f:
+                requests.post(url + "sendPhoto", data={"chat_id": ADMIN_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": f}, timeout=30)
         else: 
             requests.post(url + "sendMessage", json={"chat_id": ADMIN_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
     except: pass
 
 def send_log_to_channel(text):
-    """إرسال اللوغ بصيغة تتطابق مع كود البوت"""
     if LOG_BOT_TOKEN and LOG_CHANNEL_ID:
         try: requests.post(f"https://api.telegram.org/bot{LOG_BOT_TOKEN}/sendMessage", json={"chat_id": LOG_CHANNEL_ID, "text": text})
+        except: pass
+
+def retry_workflow():
+    """إعادة تشغيل المهام تلقائياً عند كشف حظر الكابتشا مع تمرير عدد الأجهزة المستهدف"""
+    gh_token = os.environ.get("PAT_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    gh_repo = os.environ.get("GITHUB_REPOSITORY")
+    if gh_token and gh_repo:
+        url = f"https://api.github.com/repos/{gh_repo}/actions/workflows/deploy.yml/dispatches"
+        headers = {
+            "Authorization": f"token {gh_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        inputs = {
+            'cookies_b64': os.environ.get("COOKIES_B64", ""),
+            'lab_url': LAB_URL,
+            'chat_id': str(CHAT_ID),
+            'bot_token': BOT_TOKEN,
+            'admin_id': str(ADMIN_ID),
+            'log_channel_id': LOG_CHANNEL_ID,
+            'mode': MODE,
+            'min_instances': str(MIN_INSTANCES),
+            'max_instances': str(MAX_INSTANCES)
+        }
+        try: requests.post(url, headers=headers, json={'ref': 'main', 'inputs': inputs}, timeout=15)
         except: pass
 
 # ==========================================
@@ -282,15 +309,12 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
-        send_admin("📥 جاري تحميل النسخة الرسمية للإضافة...")
         r = requests.get(BUSTER_COMPILED_URL, timeout=30)
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
         os.remove(zip_path)
-        send_admin("✅ تم تجهيز الإضافة بنجاح")
         return ext_dir
-    except Exception as e:
-        send_admin(f"❌ فشل تحميل الإضافة: {e}")
+    except Exception:
         return None
 
 async def human_click(page, locator):
@@ -315,14 +339,22 @@ async def click_start_lab_button(page):
             btn = page.get_by_role("button", name=pattern).first
             if await btn.is_visible():
                 await btn.click(force=True)
-                send_admin("✅ تم الضغط على Start Lab")
                 return True
         except: pass
         await asyncio.sleep(1)
     return False
 
+async def check_recaptcha_block(page):
+    challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"]').first
+    try:
+        if await challenge_iframe.locator("body").count() > 0:
+            iframe_text = await challenge_iframe.locator("body").inner_text()
+            if "Try again later" in iframe_text or "automated queries" in iframe_text:
+                return True
+    except: pass
+    return False
+
 async def click_captcha_checkbox(page):
-    send_admin("🤛 البحث عن مربع الكابتشا الرئيسي...")
     await asyncio.sleep(3)
     iframes = await page.locator('iframe[title*="reCAPTCHA"]').all()
     for iframe in iframes:
@@ -331,15 +363,12 @@ async def click_captcha_checkbox(page):
             checkbox = frame_content.locator('.recaptcha-checkbox-border').first
             if await checkbox.is_visible():
                 await human_click(page, checkbox)
-                send_admin("✅ تم الضغط على مربع أنا لست برنامج روبوت")
                 return True
         except: continue
     return False
 
 async def click_launch_with_credits_aggressive(page):
-    send_admin("⏳ جاري البدء بنبضات النقر والتحقق لزر الكريدت المتغير...")
     credits_pattern = re.compile(r"Launch\s+with\s+\d+\s+Credit", re.IGNORECASE)
-    
     for attempt in range(15):
         try:
             await page.evaluate('''() => {
@@ -356,7 +385,6 @@ async def click_launch_with_credits_aggressive(page):
             if await text_locator.is_visible():
                 await text_locator.click(force=True)
                 
-            send_admin(f"👆 تم إرسال نبضة ضغط لزر الكريدت (جولة {attempt+1})")
             await asyncio.sleep(2.5)
 
             is_still_visible = await page.evaluate('''() => {
@@ -370,16 +398,12 @@ async def click_launch_with_credits_aggressive(page):
             }''')
             
             if not is_still_visible:
-                send_admin("✅ اختفى زر الكريدت بنجاح، تم تجاوز الخطوة!")
                 return True
-                
         except Exception: pass 
         await asyncio.sleep(1)
-
     return True
 
 async def get_cloud_console_link(page):
-    send_admin("⏳ جاري انتظار ظهور زر 'Open Google Cloud console' واستخراج الرابط...")
     try:
         btn = page.locator("text=Open Google Cloud console").first
         await btn.wait_for(state="visible", timeout=15000)
@@ -394,49 +418,61 @@ async def get_cloud_console_link(page):
                 return null;
             }''')
         return link
-    except Exception as e:
+    except Exception:
         try:
-            await page.screenshot(path="debug_console_link.png")
-            send_admin(f"⚠️ فشل استخراج رابط الكونسول: {e}", "debug_console_link.png")
+            link = await page.evaluate('''() => {
+                let elements = Array.from(document.querySelectorAll('*'));
+                let target = elements.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
+                if (target) { return target.getAttribute('href'); }
+                return null;
+            }''')
+            return link
         except: pass
     return None
 
 async def method_1_direct_click(page):
-    send_admin("🎯 محاولة النقر المباشر المتكرر على الشخص الأصفر...")
     try:
+        if await check_recaptcha_block(page):
+            raise Exception("RECAPTCHA_BLOCKED")
+            
         challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"]').first
         audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
         if await audio_btn.is_visible(timeout=5000):
             await audio_btn.click(force=True); await asyncio.sleep(2)
-            send_admin("🔊 تم التحويل لتحدي الصوت")
         
+        if await check_recaptcha_block(page):
+            raise Exception("RECAPTCHA_BLOCKED")
+            
         buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
-        
-        for i in range(4):
+        for _ in range(4):
+            if await check_recaptcha_block(page):
+                raise Exception("RECAPTCHA_BLOCKED")
             if await buster_btn.is_visible(timeout=2000):
                 await buster_btn.click(force=True)
-                send_admin(f"✅ تم الضغط على الشخص الأصفر! (نقرة تأكيدية رقم {i+1})")
                 await asyncio.sleep(1.5)
             else:
                 break
             
         await asyncio.sleep(4)
+        if await check_recaptcha_block(page):
+            raise Exception("RECAPTCHA_BLOCKED")
+            
         try:
             verify_btn = challenge_iframe.locator('#recaptcha-verify-button')
             is_disabled = await verify_btn.evaluate("node => node.disabled")
             if not is_disabled and await verify_btn.is_visible(): await verify_btn.evaluate("node => node.click()")
         except Exception: pass 
         return True
-    except Exception as e: send_admin(f"❌ فشل أثناء محاولة النقر: {e}")
+    except Exception as e:
+        if str(e) == "RECAPTCHA_BLOCKED": raise e
     return False
 
 async def try_all_buster_methods(page):
-    send_admin("🚀 بدء عملية حل الكابتشا...")
     if await page.locator('.recaptcha-checkbox-checked').is_visible():
-        send_admin("✅ تم الحل بالفعل مبكراً!")
         return True
+    if await check_recaptcha_block(page):
+        raise Exception("RECAPTCHA_BLOCKED")
     if not await page.locator('iframe[src*="recaptcha/api2/bframe"]').is_visible():
-        send_admin("🔄 إعادة فتح الكابتشا...")
         await click_captcha_checkbox(page); await asyncio.sleep(3)
     return await method_1_direct_click(page)
 
@@ -448,7 +484,6 @@ class LoginRequiredError(Exception): pass
 async def run():
     console_link = None
     if MODE == "full_automation":
-        send_admin("🚀 بدء المهمة على GitHub Actions...")
         ext_path = await setup_compiled_buster()
         if not ext_path: return
 
@@ -484,13 +519,13 @@ async def run():
                 await dismiss_credits_modal(page)
                 
                 if await click_start_lab_button(page):
-                    # إرسال رسالة الدخول للمستخدم النهائي فقط دون حشو
                     send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
                     await asyncio.sleep(5)
                     
                     if await click_captcha_checkbox(page):
-                        await asyncio.sleep(3); await try_all_buster_methods(page); await asyncio.sleep(3) 
-                    else: send_admin("ملاحظة: لم يظهر مربع الكابتشا.")
+                        await asyncio.sleep(3)
+                        await try_all_buster_methods(page)
+                        await asyncio.sleep(3) 
                     
                     is_launched = await click_launch_with_credits_aggressive(page)
                     if is_launched:
@@ -498,8 +533,13 @@ async def run():
                 else: raise Exception("INVALID_LAB")
             except Exception as e:
                 error_str = str(e)
+                if error_str == "RECAPTCHA_BLOCKED":
+                    send_admin(f"⚠️ <b>تم اكتشاف حظر الكابتشا (Try again later) للمستخدم {CHAT_ID}. جاري جلب آي بي جديد وإعادة تشغيل المهمة تلقائياً...</b>")
+                    retry_workflow()
+                
                 send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
-                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{error_str if error_str in ['INVALID_LAB'] else 'EXTRACTION_ERROR'}")
+                err_type = "RECAPTCHA_BLOCKED" if error_str == "RECAPTCHA_BLOCKED" else ("INVALID_LAB" if error_str == "INVALID_LAB" else "EXTRACTION_ERROR")
+                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{err_type}")
                 return
             finally:
                 await asyncio.sleep(5); await context.close()
@@ -507,10 +547,8 @@ async def run():
         console_link = LAB_URL
         send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
 
-    # --- تشغيل سورس النشر الثاني ---
+    # --- تشغيل سورس النشر الثاني مع تمرير الحدود المستلمة ديناميكياً ---
     if console_link:
-        send_admin("⏳ جاري فتح كونسول السحاب وبدء خطوات نشر الـ Cloud Run...")
-        
         deploy_cmd_template = (
             "gcloud run deploy my-app \\\n"
             "  --project=$DEVSHELL_PROJECT_ID \\\n"
@@ -522,8 +560,8 @@ async def run():
             "  --memory=4Gi \\\n"
             "  --concurrency=1000 \\\n"
             "  --timeout=3600 \\\n"
-            "  --min-instances=2 \\\n"
-            "  --max-instances=8 \\\n"
+            f"  --min-instances={MIN_INSTANCES} \\\n"
+            f"  --max-instances={MAX_INSTANCES} \\\n"
             "  --execution-environment=gen2 \\\n"
             "  --cpu-boost \\\n"
             "  --region={REGION}"
@@ -592,10 +630,7 @@ async def run():
                             match = url_re.search(txt)
                             if match:
                                 final_url = match.group(1)
-                                # إرسال بصيغة التلقائي الصحيحة إلى القناة المطلوبة لمعالجة البوت التلقائية فورا
                                 send_log_to_channel(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
-                                
-                                # إرسال الرابط النهائي مباشرة وحصريا للمستخدم الذي بدأ العملية
                                 send_tg(f"🎉 <b>تم النشر بنجاح!</b>\n\n🚀 رابط الـ Cloud Run الأخير:\n<code>{final_url}</code>\n📍 المنطقة: {region}")
                                 send_admin(f"🎉 تم النشر بنجاح للمستخدم {CHAT_ID} في المنطقة {region}")
                                 return
@@ -607,12 +642,12 @@ async def run():
             except LoginRequiredError:
                 send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
                 send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT") 
-            except Exception as e:
+            except Exception:
                 send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
                 send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|DEPLOY_ERROR") 
                 try: 
                     await page.screenshot(path="error.png", full_page=True)
-                    send_admin(f"🔴 خطأ لمستخدم {CHAT_ID}:\n{str(e)[:150]}", "error.png")
+                    send_admin(f"🔴 فشل النشر للمستخدم {CHAT_ID}", "error.png")
                 except: pass
             finally:
                 await browser.close()
