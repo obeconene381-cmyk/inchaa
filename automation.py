@@ -14,15 +14,15 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # ==========================================
-# الإعدادات وقراءة متغيرات البيئة 
+# الإعدادات وقراءة متغيرات البيئة (دعم الأحرف الكبيرة والصغيرة)
 # ==========================================
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8092953314")
-ADMIN_ID = os.environ.get("ADMIN_ID", "8092953314")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs"))
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "8092953314"))
+ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "8092953314"))
 LAB_URL = os.environ.get("LAB_URL", "https://www.skills.google/focuses/41025?parent=catalog")
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
-LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", BOT_TOKEN) 
-LOG_CHANNEL_ID = "-1003781090454"
+LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", os.environ.get("bot_token", BOT_TOKEN)) 
+LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", os.environ.get("log_channel_id", "-1004367699466"))
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
 MODE = os.environ.get("MODE", "full_automation")  # 'cloud_run_only' أو 'full_automation'
 
@@ -102,12 +102,11 @@ except Exception:
 # قنوات الإرسال المحدثة (مستخدم ضد مشرف)
 # ==========================================
 def send_tg(msg, img=None):
-    """إرسال للمستخدم النهائي فقط وبصيغة HTML"""
+    """إرسال للمطلب النهائي فقط"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     try:
         if img and os.path.exists(img):
-            with open(img, "rb") as f: 
-                requests.post(url + "sendPhoto", data={"chat_id": CHAT_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": f}, timeout=30)
+            requests.post(url + "sendPhoto", data={"chat_id": CHAT_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": open(img, "rb")}, timeout=30)
         else: 
             requests.post(url + "sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
     except: pass
@@ -117,28 +116,16 @@ def send_admin(msg, img=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     try:
         if img and os.path.exists(img):
-            with open(img, "rb") as f: 
-                requests.post(url + "sendPhoto", data={"chat_id": ADMIN_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": f}, timeout=30)
+            requests.post(url + "sendPhoto", data={"chat_id": ADMIN_ID, "caption": msg, "parse_mode": "HTML"}, files={"photo": open(img, "rb")}, timeout=30)
         else: 
             requests.post(url + "sendMessage", json={"chat_id": ADMIN_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
     except: pass
 
-def send_telegram_msg(chat_id, text):
-    if BOT_TOKEN and chat_id:
-        try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-        except: pass
-
 def send_log_to_channel(text):
+    """إرسال اللوغ بصيغة تتطابق مع كود البوت"""
     if LOG_BOT_TOKEN and LOG_CHANNEL_ID:
         try: requests.post(f"https://api.telegram.org/bot{LOG_BOT_TOKEN}/sendMessage", json={"chat_id": LOG_CHANNEL_ID, "text": text})
         except: pass
-
-def send_telegram_photo(chat_id, photo_path, caption):
-    if BOT_TOKEN and chat_id:
-        try:
-            with open(photo_path, "rb") as photo:
-                requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}, files={"photo": photo})
-        except: send_telegram_msg(chat_id, caption)
 
 # ==========================================
 # دوال التحكم والـ UI لقسم الكلاود شيل 
@@ -355,19 +342,16 @@ async def click_launch_with_credits_aggressive(page):
     
     for attempt in range(15):
         try:
-            # 1. محاولة عبر الجافا سكريبت
             await page.evaluate('''() => {
                 let elements = Array.from(document.querySelectorAll('*'));
                 let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
                 if(target) target.click();
             }''')
 
-            # 2. محاولة عبر الـ XPath المرن
             xpath_locator = page.locator("xpath=//*[contains(text(), 'Launch with') and contains(text(), 'Credit')]").first
             if await xpath_locator.is_visible():
                 await xpath_locator.click(force=True)
 
-            # 3. محاولة عبر محدد الأدوار (Role)
             text_locator = page.get_by_role("button", name=credits_pattern).first
             if await text_locator.is_visible():
                 await text_locator.click(force=True)
@@ -375,7 +359,6 @@ async def click_launch_with_credits_aggressive(page):
             send_admin(f"👆 تم إرسال نبضة ضغط لزر الكريدت (جولة {attempt+1})")
             await asyncio.sleep(2.5)
 
-            # 📊 التحقق الذكي: هل ما زال الزر ظاهراً ومقروءاً على الشاشة؟
             is_still_visible = await page.evaluate('''() => {
                 let elements = Array.from(document.querySelectorAll('*'));
                 let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
@@ -386,7 +369,6 @@ async def click_launch_with_credits_aggressive(page):
                 return false;
             }''')
             
-            # إذا اختفى الزر تماماً من المستند يعني أنه تم قبوله بنجاح والنافذة أغلقت
             if not is_still_visible:
                 send_admin("✅ اختفى زر الكريدت بنجاح، تم تجاوز الخطوة!")
                 return True
@@ -394,7 +376,6 @@ async def click_launch_with_credits_aggressive(page):
         except Exception: pass 
         await asyncio.sleep(1)
 
-    # كخطوة أمان في حال اختفاء النافذة بطريقة غير متوقعة نمرر السكربت للأمام
     return True
 
 async def get_cloud_console_link(page):
@@ -431,7 +412,6 @@ async def method_1_direct_click(page):
         
         buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
         
-        # 🔄 حلقة تكرارية للضغط حتى 4 مرات لضمان التقاط الإضافة للأمر وسحب النقرة
         for i in range(4):
             if await buster_btn.is_visible(timeout=2000):
                 await buster_btn.click(force=True)
@@ -466,9 +446,6 @@ async def try_all_buster_methods(page):
 class LoginRequiredError(Exception): pass
 
 async def run():
-    # 🟢 إرسال رسالة بدء العمل للمستخدم النهائي فوراً
-    send_tg("✅ <b>تم بدء العمل، يرجى الانتظار...</b>")
-    
     console_link = None
     if MODE == "full_automation":
         send_admin("🚀 بدء المهمة على GitHub Actions...")
@@ -507,7 +484,10 @@ async def run():
                 await dismiss_credits_modal(page)
                 
                 if await click_start_lab_button(page):
+                    # إرسال رسالة الدخول للمستخدم النهائي فقط دون حشو
+                    send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
                     await asyncio.sleep(5)
+                    
                     if await click_captcha_checkbox(page):
                         await asyncio.sleep(3); await try_all_buster_methods(page); await asyncio.sleep(3) 
                     else: send_admin("ملاحظة: لم يظهر مربع الكابتشا.")
@@ -515,28 +495,19 @@ async def run():
                     is_launched = await click_launch_with_credits_aggressive(page)
                     if is_launched:
                         console_link = await get_cloud_console_link(page)
-                        if console_link:
-                            # 🟢 إرسال إشعار استخراج الرابط الناجح وبدء النشر للمستخدم
-                            send_tg(f"🎉 <b>تم استخراج رابط الكونسول بنجاح وبدء العمل!</b>\n\n🔗 الرابط المستخرج:\n<code>{console_link}</code>")
-                else: raise Exception("فشل بدء اللاب والنقر على زر Start Lab الرئيسي.")
+                else: raise Exception("INVALID_LAB")
             except Exception as e:
-                error_msg = f"🔥 خطأ أثناء التشغيل:\n{e}"
-                try:
-                    if page:
-                        error_img_path = "crash_screenshot.png"
-                        await page.screenshot(path=error_img_path)
-                        send_admin(error_msg, error_img_path)
-                    else: send_admin(error_msg)
-                except: pass
-                send_tg("❌ <b>حدث خطأ أثناء استخراج الرابط، تم إلغاء الطلب.</b>")
+                error_str = str(e)
+                send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
+                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{error_str if error_str in ['INVALID_LAB'] else 'EXTRACTION_ERROR'}")
                 return
             finally:
                 await asyncio.sleep(5); await context.close()
     else:
         console_link = LAB_URL
-        send_tg(f"🎉 <b>تم استقبال الرابط المباشر وبدء العمل!</b>\n\n🔗 الرابط:\n<code>{console_link}</code>")
+        send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
 
-    # --- تشغيل سورس النشر الثاني دون تعديل بنيته الأساسية ---
+    # --- تشغيل سورس النشر الثاني ---
     if console_link:
         send_admin("⏳ جاري فتح كونسول السحاب وبدء خطوات نشر الـ Cloud Run...")
         
@@ -621,9 +592,10 @@ async def run():
                             match = url_re.search(txt)
                             if match:
                                 final_url = match.group(1)
-                                send_log_to_channel(f"#DONE|{CHAT_ID}|{final_url}")
+                                # إرسال بصيغة التلقائي الصحيحة إلى القناة المطلوبة لمعالجة البوت التلقائية فورا
+                                send_log_to_channel(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
                                 
-                                # 🟢 إرسال الرابط النهائي بنجاح للمستخدم وللمشرف على حد سواء
+                                # إرسال الرابط النهائي مباشرة وحصريا للمستخدم الذي بدأ العملية
                                 send_tg(f"🎉 <b>تم النشر بنجاح!</b>\n\n🚀 رابط الـ Cloud Run الأخير:\n<code>{final_url}</code>\n📍 المنطقة: {region}")
                                 send_admin(f"🎉 تم النشر بنجاح للمستخدم {CHAT_ID} في المنطقة {region}")
                                 return
@@ -631,17 +603,16 @@ async def run():
                             if any(indicator in txt_lower for indicator in ERROR_INDICATORS): break
                             await asyncio.sleep(3)
                     
-                    raise Exception("انتهت المحاولات: فشل النشر في المنطقة المطلوبة أو في جميع المناطق المتاحة.")
+                    raise Exception("DEPLOY_ERROR")
             except LoginRequiredError:
-                send_tg("⚠️ <b>الرابط منتهي ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
-                send_log_to_channel(f"#FAILED|{CHAT_ID}") 
+                send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
+                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT") 
             except Exception as e:
-                error_msg = str(e)
-                send_tg("❌ <b>حدث خطأ أثناء المعالجة أو فشل النشر النهائي!</b>\nتم إلغاء طلبك.")
-                send_log_to_channel(f"#FAILED|{CHAT_ID}") 
+                send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
+                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|DEPLOY_ERROR") 
                 try: 
                     await page.screenshot(path="error.png", full_page=True)
-                    send_admin(f"🔴 خطأ لمستخدم {CHAT_ID}:\n{error_msg[:150]}", "error.png")
+                    send_admin(f"🔴 خطأ لمستخدم {CHAT_ID}:\n{str(e)[:150]}", "error.png")
                 except: pass
             finally:
                 await browser.close()
