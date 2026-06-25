@@ -9,13 +9,9 @@ import json
 import base64
 from playwright.async_api import async_playwright
 
-# إصلاح إلزامي لـ Playwright على Windows لدعم العمليات الفرعية (Subprocesses)
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-# ==========================================
-# الإعدادات وقراءة متغيرات البيئة 
-# ==========================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs")))
 CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "8092953314")))
 ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "5813081202"))
@@ -25,12 +21,8 @@ LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", os.environ.get("bot_token", BOT_
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", os.environ.get("log_channel_id", "-1004367699466"))
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
 MODE = os.environ.get("MODE", "full_automation")  
-
-# استقبال بيانات الحساب لتسجيل الدخول التلقائي في حال طلبها الكونسول
 GCP_USER = os.environ.get("GCP_USER", "")
 GCP_PASS = os.environ.get("GCP_PASS", "")
-
-# جلب عدد الأجهزة ديناميكياً من البوت (عادي = 1، قناة = 8)
 MIN_INSTANCES = os.environ.get("MIN_INSTANCES", "2")
 MAX_INSTANCES = os.environ.get("MAX_INSTANCES", "8")
 
@@ -43,7 +35,6 @@ ERROR_INDICATORS = [
     "deployment failed", "badrequest", "failed_precondition"
 ]
 
-# fف تفكيك الكوكيز الافتراضية والاحتياطية
 try:
     if COOKIES_B64.strip():
         MY_COOKIES = json.loads(base64.b64decode(COOKIES_B64).decode("utf-8"))
@@ -52,9 +43,6 @@ try:
 except Exception:
     MY_COOKIES = []
 
-# ==========================================
-# قنوات الإرسال المحدثة (مستخدم ضد مشرف)
-# ==========================================
 def send_tg(msg, img=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     try:
@@ -74,6 +62,24 @@ def send_admin(msg, img=None):
         else: 
             requests.post(url + "sendMessage", json={"chat_id": ADMIN_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
     except: pass
+
+def get_server_ip():
+    """يسحب IP السيرفر من عدة مصادر كـ fallback"""
+    services = [
+        "https://api.ipify.org?format=json",
+        "https://api.ip.sb/jsonip",
+        "https://httpbin.org/ip",
+    ]
+    for url in services:
+        try:
+            r = requests.get(url, timeout=8)
+            data = r.json()
+            ip = data.get("ip") or data.get("origin") or data.get("IP")
+            if ip:
+                return ip.strip()
+        except:
+            continue
+    return "غير معروف"
 
 def send_log_to_channel(text):
     if LOG_BOT_TOKEN and LOG_CHANNEL_ID:
@@ -102,11 +108,14 @@ def retry_workflow():
             'gcp_user': GCP_USER,
             'gcp_pass': GCP_PASS
         }
-        try: requests.post(url, headers=headers, json={'ref': 'main', 'inputs': inputs}, timeout=15)
+        try: 
+            res = requests.post(url, headers=headers, json={'ref': 'main', 'inputs': inputs}, timeout=15)
+            return res.status_code == 204
         except: pass
+    return False
 
 # ==========================================
-# دوال الأتمتة المساعدة وضبط النشر
+# دوال الأتمتة المساعدة (بدون تغيير)
 # ==========================================
 async def click_button_by_text_anywhere(page, text, exact=True, timeout_loop=120, post_click_wait=3):
     pattern = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I) if exact else re.compile(re.escape(text), re.I)
@@ -241,9 +250,6 @@ async def type_short_answer_only(page, answer_text="y"):
     await asyncio.sleep(0.4)
     return True
 
-# ==========================================
-# دالة معالجة الدخول تع جوجل كونسول تلقائياً
-# ==========================================
 async def handle_google_login(page, email, password):
     try:
         email_input = page.locator("input#identifierId").first
@@ -269,9 +275,6 @@ async def extract_credentials(page):
         return email, password
     except: return None, None
 
-# ==========================================
-# كود الكابتشا وبيت الكريديت
-# ==========================================
 def fix_cookies_for_playwright(cookies):
     valid_samesite = ["Strict", "Lax", "None"]
     cleaned_cookies = []
@@ -288,12 +291,14 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
-        r = requests.get(BUSTER_COMPILED_URL, timeout=30)
+        r = requests.get(BUSTER_COMPILED_URL, timeout=60)  # زيادة timeout من 30 إلى 60
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
         os.remove(zip_path)
         return ext_dir
-    except Exception: return None
+    except Exception as e:
+        send_admin(f"⚠️ فشل تحميل Buster: {e}")
+        return None
 
 async def human_click(page, locator):
     try:
@@ -353,13 +358,10 @@ async def click_launch_with_credits_aggressive(page):
                 let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
                 if(target) target.click();
             }''')
-
             xpath_locator = page.locator("xpath=//*[contains(text(), 'Launch with') and contains(text(), 'Credit')]").first
             if await xpath_locator.is_visible(): await xpath_locator.click(force=True)
-
             text_locator = page.get_by_role("button", name=credits_pattern).first
             if await text_locator.is_visible(): await text_locator.click(force=True)
-                
             await asyncio.sleep(2.5)
             is_still_visible = await page.evaluate('''() => {
                 let elements = Array.from(document.querySelectorAll('*'));
@@ -419,17 +421,52 @@ async def try_all_buster_methods(page):
     return await method_1_direct_click(page)
 
 # ==========================================
-# الدالة التنفيذية الموحدة لدمج المهام 
+# كشف الكابتشا اليدوية (فاقت ضد الروبوت)
 # ==========================================
+async def detect_robot_block(page):
+    """يكشف إذا ظهرت رسالة 'لا يمكننا معالجة طلبك' أو ما شابهها"""
+    block_patterns = [
+        r"can't process your request",
+        "لا يمكننا معالجة",
+        r"automated queries",
+        "unusual traffic",
+        "verify you.re not a robot",
+        "we detected unusual",
+        "sorry",
+    ]
+    try:
+        txt = await page.inner_text("body")
+        txt_lower = txt.lower()
+        for pat in block_patterns:
+            if re.search(pat, txt_lower, re.I):
+                return True
+    except: pass
+    return False
+
 class LoginRequiredError(Exception): pass
 
 async def run():
     console_link = None
     extracted_user, extracted_pass = None, None
     
+    # سحب IP السيرفر وإرساله للادمن
+    server_ip = get_server_ip()
+    send_admin(
+        f"🔄 بدأ تشغيل workflow\n"
+        f"👤 المستخدم: {CHAT_ID}\n"
+        f"🌐 IP السيرفر: <code>{server_ip}</code>\n"
+        f"⚙️ MODE: {MODE}\n"
+        f"📍 المنطقة: {REGION_OVERRIDE if REGION_OVERRIDE else 'تلقائي'}"
+    )
+    
     if MODE == "full_automation":
         ext_path = await setup_compiled_buster()
-        if not ext_path: return
+        if not ext_path:
+            send_tg("❌ <b>فشل تحضير أدوات التشغيل، يرجى المحاولة لاحقاً.</b>")
+            send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|BUSTER_SETUP_FAILED")
+            return
+
+        send_admin(f"✅ تم تحميل Buster للمستخدم {CHAT_ID}")
 
         user_data_dir = os.path.abspath("chrome_profile")
         if os.path.exists(user_data_dir):
@@ -454,38 +491,75 @@ async def run():
                     raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
                     await context.add_cookies(fix_cookies_for_playwright(raw_cookies))
                 
+                send_admin(f"🌐 فتح رابط اللاب للمستخدم {CHAT_ID}")
                 await page.goto(LAB_URL, timeout=60000)
                 await asyncio.sleep(4)
+
+                # كشف حظر الروبوت مبكراً
+                if await detect_robot_block(page):
+                    raise Exception("RECAPTCHA_BLOCKED")
+
                 await dismiss_credits_modal(page)
                 
                 if await click_start_lab_button(page):
                     send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
+                    send_admin(f"✅ تم الضغط على Start Lab للمستخدم {CHAT_ID}")
                     await asyncio.sleep(5)
+
+                    # كشف حظر الروبوت بعد الضغط
+                    if await detect_robot_block(page):
+                        raise Exception("RECAPTCHA_BLOCKED")
                     
                     if await click_captcha_checkbox(page):
-                        await asyncio.sleep(3); await try_all_buster_methods(page); await asyncio.sleep(3) 
+                        send_admin(f"🔲 ظهرت كابتشا للمستخدم {CHAT_ID}، جاري حلها...")
+                        await asyncio.sleep(3)
+                        
+                        try:
+                            await try_all_buster_methods(page)
+                        except Exception as cap_err:
+                            if str(cap_err) == "RECAPTCHA_BLOCKED":
+                                raise
+                            # فشل Buster لكن ليس حظر كامل — نكمل
+                            send_admin(f"⚠️ Buster فشل للمستخدم {CHAT_ID}: {cap_err}، نكمل...")
+                        
+                        await asyncio.sleep(3)
+
+                    # كشف حظر الروبوت بعد الكابتشا
+                    if await detect_robot_block(page):
+                        raise Exception("RECAPTCHA_BLOCKED")
                     
                     is_launched = await click_launch_with_credits_aggressive(page)
                     if is_launched:
+                        send_admin(f"🚀 تم إطلاق اللاب للمستخدم {CHAT_ID}، جاري استخراج البيانات...")
                         await asyncio.sleep(3)
                         extracted_user, extracted_pass = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
-                else: raise Exception("INVALID_LAB")
+                        if not console_link:
+                            send_admin(f"⚠️ ما لقينا رابط الكونسول للمستخدم {CHAT_ID}")
+                else:
+                    raise Exception("INVALID_LAB")
+                    
             except Exception as e:
                 error_str = str(e)
                 try:
-                    if page:
-                        await page.screenshot(path="error_phase1.png", full_page=True)
-                        send_admin(f"🔴 فشل في المرحلة الأولى للمستخدم {CHAT_ID}", "error_phase1.png")
-                except: pass
+                    await page.screenshot(path="error_phase1.png", full_page=True)
+                    send_admin(f"🔴 فشل المرحلة 1\n👤 المستخدم: {CHAT_ID}\n🌐 IP: <code>{server_ip}</code>\n❌ السبب: {error_str}", "error_phase1.png")
+                except:
+                    send_admin(f"🔴 فشل المرحلة 1\n👤 المستخدم: {CHAT_ID}\n🌐 IP: <code>{server_ip}</code>\n❌ السبب: {error_str}")
 
                 if error_str == "RECAPTCHA_BLOCKED":
-                    send_admin(f"⚠️ حظر كابتشا للمستخدم {CHAT_ID}، جاري إعادة المحاولة...")
-                    retry_workflow()
-                
-                send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
-                err_type = "RECAPTCHA_BLOCKED" if error_str == "RECAPTCHA_BLOCKED" else ("INVALID_LAB" if error_str == "INVALID_LAB" else "EXTRACTION_ERROR")
-                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{err_type}")
+                    send_tg("⚠️ <b>تم اكتشاف حماية ضد الروبوت!</b>\nجاري إعادة المحاولة تلقائياً...")
+                    send_admin(f"🔁 إعادة محاولة بسبب كابتشا للمستخدم {CHAT_ID}")
+                    retried = retry_workflow()
+                    if not retried:
+                        send_tg("❌ <b>فشلت إعادة المحاولة، يرجى المحاولة يدوياً.</b>")
+                        send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|RECAPTCHA_BLOCKED")
+                elif error_str == "INVALID_LAB":
+                    send_tg("❌ <b>الرابط غير صالح أو اللاب غير متاح حالياً.</b>")
+                    send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|INVALID_LAB")
+                else:
+                    send_tg("❌ <b>فشل النشر في أحد الخطوات، تم إرسال إشعار للمشرف لحل المشكلة.</b>")
+                    send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|PHASE1_ERROR")
                 return
             finally:
                 await asyncio.sleep(5); await context.close()
@@ -493,138 +567,159 @@ async def run():
         console_link = LAB_URL
         send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
 
-    # --- تشغيل سورس النشر والفوترة والمستندات ---
-    if console_link:
-        deploy_cmd_template = (
-            "gcloud run deploy my-app \\\n"
-            "  --project=$DEVSHELL_PROJECT_ID \\\n"
-            "  --image=docker.io/nkka404/vless-ws:latest \\\n"
-            "  --platform=managed \\\n"
-            "  --allow-unauthenticated \\\n"
-            "  --port=8080 \\\n"
-            "  --cpu=2 \\\n"
-            "  --memory=4Gi \\\n"
-            "  --concurrency=1000 \\\n"
-            "  --timeout=3600 \\\n"
-            f"  --min-instances={MIN_INSTANCES} \\\n"
-            f"  --max-instances={MAX_INSTANCES} \\\n"
-            "  --execution-environment=gen2 \\\n"
-            "  --cpu-boost \\\n"
-            "  --region={REGION}"
-        )
+    if not console_link:
+        send_tg("❌ <b>فشل الحصول على رابط الكونسول، يرجى المحاولة مرة أخرى.</b>")
+        send_admin(f"🔴 console_link فارغ للمستخدم {CHAT_ID}")
+        send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|NO_CONSOLE_LINK")
+        return
 
-        # منطق عزل خطأ الفشل في المنطقة المحددة
-        if REGION_OVERRIDE and REGION_OVERRIDE.strip():
-            regions = [REGION_OVERRIDE.strip()]
-            is_exclusive_region = True
-        else:
-            regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
-            is_exclusive_region = False
-            
-        deploy_wait_loops = 20
+    send_admin(f"🔗 رابط الكونسول للمستخدم {CHAT_ID}: {console_link}")
+
+    deploy_cmd_template = (
+        "gcloud run deploy my-app \\\n"
+        "  --project=$DEVSHELL_PROJECT_ID \\\n"
+        "  --image=docker.io/nkka404/vless-ws:latest \\\n"
+        "  --platform=managed \\\n"
+        "  --allow-unauthenticated \\\n"
+        "  --port=8080 \\\n"
+        "  --cpu=2 \\\n"
+        "  --memory=4Gi \\\n"
+        "  --concurrency=1000 \\\n"
+        "  --timeout=3600 \\\n"
+        f"  --min-instances={MIN_INSTANCES} \\\n"
+        f"  --max-instances={MAX_INSTANCES} \\\n"
+        "  --execution-environment=gen2 \\\n"
+        "  --cpu-boost \\\n"
+        "  --region={REGION}"
+    )
+
+    if REGION_OVERRIDE and REGION_OVERRIDE.strip():
+        regions = [REGION_OVERRIDE.strip()]
+        is_exclusive_region = True
+    else:
+        regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
+        is_exclusive_region = False
         
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--lang=en-US", "--no-sandbox", "--disable-gpu"])
-            context = await browser.new_context(locale="en-US", viewport={'width': 1280, 'height': 720})
-            page = await context.new_page()
+    deploy_wait_loops = 20
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=["--lang=en-US", "--no-sandbox", "--disable-gpu"])
+        context = await browser.new_context(locale="en-US", viewport={'width': 1280, 'height': 720})
+        page = await context.new_page()
+        
+        try:
+            send_admin(f"🖥️ فتح الكونسول للمستخدم {CHAT_ID}")
+            await page.goto(console_link, timeout=300000, wait_until="domcontentloaded")
+            await asyncio.sleep(5)
             
-            try:
-                await page.goto(console_link, timeout=300000, wait_until="domcontentloaded")
-                await asyncio.sleep(5)
-                
-                # فحص حاجة الصفحة إلى تسجيل الدخول (سواء الممررة يدويًا أو المستخرجة تلقائيًا)
-                is_login_page = await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible()
-                is_google_acc = await page.locator("text='Use your Google Account'").first.count() > 0 and await page.locator("text='Use your Google Account'").first.is_visible()
-                
-                if is_login_page or is_google_acc:
-                    target_user = GCP_USER or extracted_user
-                    target_pass = GCP_PASS or extracted_pass
-                    if target_user and target_pass:
-                        await handle_google_login(page, target_user, target_pass)
-                        if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible():
-                            raise LoginRequiredError()
-                    else:
+            is_login_page = await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible()
+            is_google_acc = await page.locator("text='Use your Google Account'").first.count() > 0 and await page.locator("text='Use your Google Account'").first.is_visible()
+            
+            if is_login_page or is_google_acc:
+                target_user = GCP_USER or extracted_user
+                target_pass = GCP_PASS or extracted_pass
+                if target_user and target_pass:
+                    send_admin(f"🔑 تسجيل دخول تلقائي للمستخدم {CHAT_ID}")
+                    await handle_google_login(page, target_user, target_pass)
+                    if await page.locator("input#identifierId").first.count() > 0 and await page.locator("input#identifierId").first.is_visible():
                         raise LoginRequiredError()
-                
-                clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
-                if clicked_understand: await asyncio.sleep(10) 
-                
-                await try_click_terms_checkbox(page)
-                await asyncio.sleep(2)
-                await click_button_by_text_anywhere(page, "Agree and continue", exact=True, timeout_loop=60)
-                await asyncio.sleep(3)
-                
-                for sel in ['button[aria-label*="Activate Cloud Shell"]', 'button[title*="Cloud Shell"]']:
-                    try:
-                        loc = page.locator(sel).first
-                        if await loc.count() > 0 and await loc.is_visible(): await loc.click(timeout=3000, force=True); break
-                    except: pass
-                    
-                await asyncio.sleep(5) 
-                await click_button_by_text_anywhere(page, "Continue", exact=True, timeout_loop=60)
-                await click_button_by_text_anywhere(page, "Authorize", exact=True, timeout_loop=60)
-                
-                if await wait_for_cloud_shell_prompt(page):
-                    url_re = re.compile(r"Service URL:\s*(https://[a-zA-Z0-9.-]+\.run\.app)", re.I)
-                    
-                    for region in regions:
-                        try:
-                            await focus_terminal_near_prompt(page, timeout_loop=5)
-                            await page.keyboard.press("Control+C"); await asyncio.sleep(1)
-                            await paste_command_and_run(page, "clear"); await asyncio.sleep(2)
-                        except: pass
-
-                        cmd = deploy_cmd_template.replace("{REGION}", region)
-                        await paste_command_and_run(page, cmd)
-                        
-                        y_sent = False
-                        for step in range(deploy_wait_loops):
-                            f = await get_cloudshell_frame(page)
-                            if not f: await asyncio.sleep(3); continue
-                            
-                            txt = await f.inner_text("body")
-                            txt_lower = txt.lower()
-                            
-                            if not y_sent and await wait_for_yes_no_prompt(page, timeout_loop=1):
-                                await type_short_answer_only(page, "y")
-                                try: await page.keyboard.press("Enter")
-                                except: pass
-                                y_sent = True
-                            
-                            match = url_re.search(txt)
-                            if match:
-                                final_url = match.group(1)
-                                send_log_to_channel(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
-                                send_tg(f"🎉 <b>تم النشر بنجاح!</b>\n\n🚀 رابط الـ Cloud Run الأخير:\n<code>{final_url}</code>\n📍 المنطقة: {region}")
-                                send_admin(f"🎉 تم النشر بنجاح للمستخدم {CHAT_ID} في المنطقة {region}")
-                                return
-                            
-                            if any(indicator in txt_lower for indicator in ERROR_INDICATORS): 
-                                if is_exclusive_region: raise Exception("REGION_FAILED")
-                                break
-                            await asyncio.sleep(3)
-                    
-                    raise Exception("REGION_FAILED" if is_exclusive_region else "DEPLOY_ERROR")
-            except LoginRequiredError:
-                try: await page.screenshot(path="expired.png", full_page=True); send_admin(f"🔴 حساب منتهي الصلاحية للمطلب {CHAT_ID}", "expired.png")
-                except: pass
-                send_tg("⚠️ <b>رابط منتهي الصلاحية ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
-                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT") 
-            except Exception as e:
-                error_type = "REGION_FAILED" if str(e) == "REGION_FAILED" else "DEPLOY_ERROR"
-                try: 
-                    await page.screenshot(path="error.png", full_page=True)
-                    send_admin(f"🔴 فشل في مرحلة النشر للمستخدم {CHAT_ID} بسبب {error_type}", "error.png")
-                except: pass
-                
-                if error_type == "REGION_FAILED":
-                    send_tg("❌ <b>فشل النشر في المنطقة المحددة! تم إرسال إشعار للمشرف.</b>")
                 else:
-                    send_tg("❌ <b>فشل النشر في احد الخطوات تم ارسال اشعار للمشرف لحل المشكلة.</b>")
+                    raise LoginRequiredError()
+            
+            send_admin(f"✅ تم فتح الكونسول للمستخدم {CHAT_ID}، جاري تشغيل Cloud Shell...")
+            
+            clicked_understand = await click_button_by_text_anywhere(page, "I understand", exact=True, timeout_loop=60, post_click_wait=0)
+            if clicked_understand: await asyncio.sleep(10) 
+            
+            await try_click_terms_checkbox(page)
+            await asyncio.sleep(2)
+            await click_button_by_text_anywhere(page, "Agree and continue", exact=True, timeout_loop=60)
+            await asyncio.sleep(3)
+            
+            for sel in ['button[aria-label*="Activate Cloud Shell"]', 'button[title*="Cloud Shell"]']:
+                try:
+                    loc = page.locator(sel).first
+                    if await loc.count() > 0 and await loc.is_visible(): await loc.click(timeout=3000, force=True); break
+                except: pass
+                
+            await asyncio.sleep(5) 
+            await click_button_by_text_anywhere(page, "Continue", exact=True, timeout_loop=60)
+            await click_button_by_text_anywhere(page, "Authorize", exact=True, timeout_loop=60)
+            
+            shell_ready = await wait_for_cloud_shell_prompt(page)
+            if not shell_ready:
+                send_admin(f"⚠️ Cloud Shell ما استجاب للمستخدم {CHAT_ID}")
+                raise Exception("SHELL_TIMEOUT")
+
+            send_admin(f"✅ Cloud Shell جاهز للمستخدم {CHAT_ID}، جاري النشر...")
+            send_tg("✅ <b>تم فتح Cloud Shell بنجاح، جاري نشر الخدمة...</b>")
+
+            url_re = re.compile(r"Service URL:\s*\n?\s*(https://[a-zA-Z0-9._/-]+\.run\.app)", re.I | re.M)
+            
+            for region in regions:
+                send_admin(f"🌍 محاولة النشر في {region} للمستخدم {CHAT_ID}")
+                try:
+                    await focus_terminal_near_prompt(page, timeout_loop=5)
+                    await page.keyboard.press("Control+C"); await asyncio.sleep(1)
+                    await paste_command_and_run(page, "clear"); await asyncio.sleep(2)
+                except: pass
+
+                cmd = deploy_cmd_template.replace("{REGION}", region)
+                await paste_command_and_run(page, cmd)
+                
+                y_sent = False
+                for step in range(deploy_wait_loops):
+                    f = await get_cloudshell_frame(page)
+                    if not f: await asyncio.sleep(3); continue
                     
-                send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{error_type}") 
-            finally:
-                await browser.close()
+                    txt = await f.inner_text("body")
+                    txt_lower = txt.lower()
+                    
+                    if not y_sent and await wait_for_yes_no_prompt(page, timeout_loop=1):
+                        await type_short_answer_only(page, "y")
+                        try: await page.keyboard.press("Enter")
+                        except: pass
+                        y_sent = True
+                    
+                    match = url_re.search(txt)
+                    if match:
+                        final_url = match.group(1)
+                        send_log_to_channel(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
+                        send_tg(f"🎉 <b>تم النشر بنجاح!</b>\n\n🚀 رابط الـ Cloud Run:\n<code>{final_url}</code>\n📍 المنطقة: {region}")
+                        send_admin(f"🎉 نجح النشر للمستخدم {CHAT_ID} في {region}: {final_url}")
+                        return
+                    
+                    if any(indicator in txt_lower for indicator in ERROR_INDICATORS):
+                        send_admin(f"❌ خطأ في {region} للمستخدم {CHAT_ID}")
+                        if is_exclusive_region: raise Exception("REGION_FAILED")
+                        break
+                    await asyncio.sleep(3)
+            
+            raise Exception("REGION_FAILED" if is_exclusive_region else "DEPLOY_ERROR")
+
+        except LoginRequiredError:
+            try: await page.screenshot(path="expired.png", full_page=True); send_admin(f"🔴 حساب منتهي الصلاحية للمستخدم {CHAT_ID}", "expired.png")
+            except: send_admin(f"🔴 حساب منتهي الصلاحية للمستخدم {CHAT_ID}")
+            send_tg("⚠️ <b>رابط منتهي الصلاحية ويطلب تسجيل الدخول!</b>\nتم إلغاء طلبك، يمكنك المحاولة برابط جديد.")
+            send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|EXPIRED_ACCOUNT") 
+        except Exception as e:
+            error_type = str(e) if str(e) in ("REGION_FAILED", "DEPLOY_ERROR", "SHELL_TIMEOUT") else "DEPLOY_ERROR"
+            try: 
+                await page.screenshot(path="error.png", full_page=True)
+                send_admin(f"🔴 فشل النشر\n👤 المستخدم: {CHAT_ID}\n🌐 IP: <code>{server_ip}</code>\n❌ السبب: {error_type}", "error.png")
+            except:
+                send_admin(f"🔴 فشل النشر\n👤 المستخدم: {CHAT_ID}\n🌐 IP: <code>{server_ip}</code>\n❌ السبب: {error_type}")
+            
+            if error_type == "REGION_FAILED":
+                send_tg("❌ <b>فشل النشر في المنطقة المحددة، يرجى المحاولة بمنطقة أخرى.</b>")
+            elif error_type == "SHELL_TIMEOUT":
+                send_tg("❌ <b>انتهت مهلة الاتصال بـ Cloud Shell، يرجى المحاولة مرة أخرى.</b>")
+            else:
+                send_tg("❌ <b>فشل النشر في أحد الخطوات، تم إرسال إشعار للمشرف.</b>")
+                
+            send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|{error_type}") 
+        finally:
+            await browser.close()
 
 if __name__ == "__main__":
     asyncio.run(run())
