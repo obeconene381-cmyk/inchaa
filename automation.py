@@ -64,7 +64,6 @@ def send_admin(msg, img=None):
     except: pass
 
 def get_server_ip():
-    """يسحب IP السيرفر من عدة مصادر كـ fallback"""
     services = [
         "https://api.ipify.org?format=json",
         "https://api.ip.sb/jsonip",
@@ -115,7 +114,7 @@ def retry_workflow():
     return False
 
 # ==========================================
-# دوال الأتمتة المساعدة (بدون تغيير)
+# دوال الأتمتة المساعدة
 # ==========================================
 async def click_button_by_text_anywhere(page, text, exact=True, timeout_loop=120, post_click_wait=3):
     pattern = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I) if exact else re.compile(re.escape(text), re.I)
@@ -291,7 +290,7 @@ async def setup_compiled_buster():
     os.makedirs(ext_dir)
     zip_path = "buster_ready.zip"
     try:
-        r = requests.get(BUSTER_COMPILED_URL, timeout=60)  # زيادة timeout من 30 إلى 60
+        r = requests.get(BUSTER_COMPILED_URL, timeout=60)
         with open(zip_path, "wb") as f: f.write(r.content)
         with zipfile.ZipFile(zip_path, 'r') as z: z.extractall(ext_dir)
         os.remove(zip_path)
@@ -389,11 +388,10 @@ async def click_launch_with_credits_aggressive(page):
                 await asyncio.sleep(2.5)
                 return True
 
-        except Exception as e:
+        except Exception:
             pass
         await asyncio.sleep(1)
 
-    # فشل — أرسل screenshot
     try:
         await page.screenshot(path="failed_launch.png")
         send_admin(f"❌ فشل إيجاد زر Launch with Credits بعد 15 محاولة", "failed_launch.png")
@@ -403,11 +401,8 @@ async def click_launch_with_credits_aggressive(page):
 
 async def get_cloud_console_link(page):
     send_admin(f"⏳ انتظار زر Open Google Cloud console...")
-    
-    # محاولة لمدة 3 دقائق
     for attempt in range(18):
         try:
-            # طريقة 1: نص مباشر
             btn = page.locator("text=Open Google Cloud console").first
             if await btn.count() > 0 and await btn.is_visible():
                 link = await btn.get_attribute("href")
@@ -415,7 +410,6 @@ async def get_cloud_console_link(page):
                     send_admin(f"✅ تم سحب رابط الكونسول (طريقة 1)")
                     return link
 
-            # طريقة 2: role=link
             btn2 = page.get_by_role("link", name=re.compile(r"Open Google Cloud console", re.I)).first
             if await btn2.count() > 0 and await btn2.is_visible():
                 link = await btn2.get_attribute("href")
@@ -423,7 +417,6 @@ async def get_cloud_console_link(page):
                     send_admin(f"✅ تم سحب رابط الكونسول (طريقة 2)")
                     return link
 
-            # طريقة 3: JavaScript
             link = await page.evaluate("""() => {
                 const all = Array.from(document.querySelectorAll('a, button, [role=link]'));
                 const el = all.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
@@ -433,21 +426,17 @@ async def get_cloud_console_link(page):
             if link:
                 send_admin(f"✅ تم سحب رابط الكونسول (طريقة JS)")
                 return link
-
-        except Exception as e:
+        except Exception:
             pass
 
-        # كل 30 ثانية أرسل screenshot للتشخيص
         if attempt % 3 == 2:
             try:
                 await page.screenshot(path=f"waiting_console_{attempt}.png")
                 send_admin(f"⏳ لا يزال ينتظر زر الكونسول... ({(attempt+1)*10}ث)", f"waiting_console_{attempt}.png")
             except:
                 send_admin(f"⏳ لا يزال ينتظر زر الكونسول... ({(attempt+1)*10}ث)")
-
         await asyncio.sleep(10)
 
-    # فشل نهائي — أرسل screenshot
     try:
         await page.screenshot(path="failed_console_link.png")
         send_admin("❌ فشل إيجاد زر الكونسول بعد 3 دقائق", "failed_console_link.png")
@@ -491,11 +480,7 @@ async def try_all_buster_methods(page):
         await click_captcha_checkbox(page); await asyncio.sleep(3)
     return await method_1_direct_click(page)
 
-# ==========================================
-# كشف الكابتشا اليدوية (فاقت ضد الروبوت)
-# ==========================================
 async def detect_robot_block(page):
-    """يكشف إذا ظهرت رسالة 'لا يمكننا معالجة طلبك' أو ما شابهها"""
     block_patterns = [
         r"can't process your request",
         "لا يمكننا معالجة",
@@ -516,11 +501,13 @@ async def detect_robot_block(page):
 
 class LoginRequiredError(Exception): pass
 
+# ==========================================
+# الدالة التنفيذية الأساسية المحدثة
+# ==========================================
 async def run():
     console_link = None
     extracted_user, extracted_pass = None, None
     
-    # سحب IP السيرفر وإرساله للادمن
     server_ip = get_server_ip()
     send_admin(
         f"🔄 بدأ تشغيل workflow\n"
@@ -566,7 +553,6 @@ async def run():
                 await page.goto(LAB_URL, timeout=60000)
                 await asyncio.sleep(4)
 
-                # كشف حظر الروبوت مبكراً
                 if await detect_robot_block(page):
                     raise Exception("RECAPTCHA_BLOCKED")
 
@@ -577,7 +563,6 @@ async def run():
                     send_admin(f"✅ تم الضغط على Start Lab للمستخدم {CHAT_ID}")
                     await asyncio.sleep(5)
 
-                    # كشف حظر الروبوت بعد الضغط
                     if await detect_robot_block(page):
                         raise Exception("RECAPTCHA_BLOCKED")
                     
@@ -590,12 +575,9 @@ async def run():
                         except Exception as cap_err:
                             if str(cap_err) == "RECAPTCHA_BLOCKED":
                                 raise
-                            # فشل Buster لكن ليس حظر كامل — نكمل
                             send_admin(f"⚠️ Buster فشل للمستخدم {CHAT_ID}: {cap_err}، نكمل...")
-                        
                         await asyncio.sleep(3)
 
-                    # كشف حظر الروبوت بعد الكابتشا
                     if await detect_robot_block(page):
                         raise Exception("RECAPTCHA_BLOCKED")
                     
@@ -676,6 +658,15 @@ async def run():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, args=["--lang=en-US", "--no-sandbox", "--disable-gpu"])
         context = await browser.new_context(locale="en-US", viewport={'width': 1280, 'height': 720})
+        
+        # =============================================================
+        # 🛠️ [إصلاح أساسي]: حقن الكوكيز للمرحلة الثانية لتفادي حظر كونسول جوجل
+        # =============================================================
+        if MY_COOKIES:
+            raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
+            await context.add_cookies(fix_cookies_for_playwright(raw_cookies))
+        # =============================================================
+        
         page = await context.new_page()
         
         try:
