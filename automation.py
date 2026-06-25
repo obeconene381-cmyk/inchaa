@@ -351,38 +351,109 @@ async def click_captcha_checkbox(page):
 
 async def click_launch_with_credits_aggressive(page):
     credits_pattern = re.compile(r"Launch\s+with\s+\d+\s+Credit", re.IGNORECASE)
+    send_admin(f"⏳ البحث عن زر Launch with Credits للمستخدم {CHAT_ID}...")
     for attempt in range(15):
         try:
-            await page.evaluate('''() => {
+            js_clicked = await page.evaluate('''() => {
                 let elements = Array.from(document.querySelectorAll('*'));
                 let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
-                if(target) target.click();
-            }''')
-            xpath_locator = page.locator("xpath=//*[contains(text(), 'Launch with') and contains(text(), 'Credit')]").first
-            if await xpath_locator.is_visible(): await xpath_locator.click(force=True)
-            text_locator = page.get_by_role("button", name=credits_pattern).first
-            if await text_locator.is_visible(): await text_locator.click(force=True)
-            await asyncio.sleep(2.5)
-            is_still_visible = await page.evaluate('''() => {
-                let elements = Array.from(document.querySelectorAll('*'));
-                let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
-                if (target) {
-                    const rect = target.getBoundingClientRect();
-                    return rect.width > 0 && rect.height > 0 && window.getComputedStyle(target).display !== 'none';
-                }
+                if(target) { target.click(); return true; }
                 return false;
             }''')
-            if not is_still_visible: return True
-        except Exception: pass 
+            if js_clicked:
+                await asyncio.sleep(2.5)
+                is_still_visible = await page.evaluate('''() => {
+                    let elements = Array.from(document.querySelectorAll('*'));
+                    let target = elements.find(e => e.textContent && /Launch\s+with\s+\d+\s+Credit/i.test(e.textContent.trim()));
+                    if (target) {
+                        const rect = target.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0 && window.getComputedStyle(target).display !== 'none';
+                    }
+                    return false;
+                }''')
+                if not is_still_visible:
+                    send_admin(f"✅ تم الضغط على Launch with Credits (محاولة {attempt+1})")
+                    return True
+
+            xpath_locator = page.locator("xpath=//*[contains(text(), 'Launch with') and contains(text(), 'Credit')]").first
+            if await xpath_locator.is_visible():
+                await xpath_locator.click(force=True)
+                send_admin(f"✅ تم الضغط على Launch (XPath، محاولة {attempt+1})")
+                await asyncio.sleep(2.5)
+                return True
+
+            text_locator = page.get_by_role("button", name=credits_pattern).first
+            if await text_locator.is_visible():
+                await text_locator.click(force=True)
+                send_admin(f"✅ تم الضغط على Launch (Button، محاولة {attempt+1})")
+                await asyncio.sleep(2.5)
+                return True
+
+        except Exception as e:
+            pass
         await asyncio.sleep(1)
-    return True
+
+    # فشل — أرسل screenshot
+    try:
+        await page.screenshot(path="failed_launch.png")
+        send_admin(f"❌ فشل إيجاد زر Launch with Credits بعد 15 محاولة", "failed_launch.png")
+    except:
+        send_admin(f"❌ فشل إيجاد زر Launch with Credits بعد 15 محاولة")
+    return False
 
 async def get_cloud_console_link(page):
+    send_admin(f"⏳ انتظار زر Open Google Cloud console...")
+    
+    # محاولة لمدة 3 دقائق
+    for attempt in range(18):
+        try:
+            # طريقة 1: نص مباشر
+            btn = page.locator("text=Open Google Cloud console").first
+            if await btn.count() > 0 and await btn.is_visible():
+                link = await btn.get_attribute("href")
+                if link:
+                    send_admin(f"✅ تم سحب رابط الكونسول (طريقة 1)")
+                    return link
+
+            # طريقة 2: role=link
+            btn2 = page.get_by_role("link", name=re.compile(r"Open Google Cloud console", re.I)).first
+            if await btn2.count() > 0 and await btn2.is_visible():
+                link = await btn2.get_attribute("href")
+                if link:
+                    send_admin(f"✅ تم سحب رابط الكونسول (طريقة 2)")
+                    return link
+
+            # طريقة 3: JavaScript
+            link = await page.evaluate("""() => {
+                const all = Array.from(document.querySelectorAll('a, button, [role=link]'));
+                const el = all.find(e => e.textContent && e.textContent.includes('Open Google Cloud console'));
+                if (el) return el.getAttribute('href') || el.href || null;
+                return null;
+            }""")
+            if link:
+                send_admin(f"✅ تم سحب رابط الكونسول (طريقة JS)")
+                return link
+
+        except Exception as e:
+            pass
+
+        # كل 30 ثانية أرسل screenshot للتشخيص
+        if attempt % 3 == 2:
+            try:
+                await page.screenshot(path=f"waiting_console_{attempt}.png")
+                send_admin(f"⏳ لا يزال ينتظر زر الكونسول... ({(attempt+1)*10}ث)", f"waiting_console_{attempt}.png")
+            except:
+                send_admin(f"⏳ لا يزال ينتظر زر الكونسول... ({(attempt+1)*10}ث)")
+
+        await asyncio.sleep(10)
+
+    # فشل نهائي — أرسل screenshot
     try:
-        btn = page.locator("text=Open Google Cloud console").first
-        await btn.wait_for(state="visible", timeout=15000)
-        return await btn.get_attribute("href")
-    except Exception: return None
+        await page.screenshot(path="failed_console_link.png")
+        send_admin("❌ فشل إيجاد زر الكونسول بعد 3 دقائق", "failed_console_link.png")
+    except:
+        send_admin("❌ فشل إيجاد زر الكونسول بعد 3 دقائق")
+    return None
 
 async def method_1_direct_click(page):
     try:
