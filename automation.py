@@ -502,7 +502,7 @@ async def detect_robot_block(page):
 class LoginRequiredError(Exception): pass
 
 # ==========================================
-# الدالة التنفيذية الأساسية المحدثة
+# الدالة التنفيذية الأساسية المحدثة والمثبتة
 # ==========================================
 async def run():
     console_link = None
@@ -545,11 +545,28 @@ async def run():
                 page = context.pages[0]
                 await page.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
                 
+                # 🛠️ [فحص الكوكيز وإبلاغ الأدمن بعددها للتشخيص]
+                cookie_count = 0
                 if MY_COOKIES:
                     raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
-                    await context.add_cookies(fix_cookies_for_playwright(raw_cookies))
-                
-                send_admin(f"🌐 فتح رابط اللاب للمستخدم {CHAT_ID}")
+                    cookie_count = len(raw_cookies)
+                send_admin(f"📊 عدد الكوكيز المكتشفة في متغيرات البيئة: {cookie_count}")
+
+                # 🛠️ [تعديل الدخول الجذري للمرحلة الأولى]: فتح النطاق أولاً لحقن الجلسة بنجاح
+                send_admin("🌐 جاري زيارة النطاق الرئيسي لحقن كوكيز الحساب...")
+                await page.goto("https://www.skills.google", timeout=60000)
+                await asyncio.sleep(2)
+
+                if cookie_count > 0:
+                    cleaned_cookies = fix_cookies_for_playwright(raw_cookies)
+                    await context.add_cookies(cleaned_cookies)
+                    send_admin("✅ تم حقن الكوكيز بنجاح داخل المتصفح الرئيسي.")
+                    await page.reload()
+                    await asyncio.sleep(3)
+                else:
+                    send_admin("⚠️ تحذير: سيتم الدخول بدون كوكيز لأن القائمة فارغة! تأكد من جيت هاب Secrets.")
+
+                send_admin(f"🌐 فتح رابط اللاب الفعلي للمستخدم {CHAT_ID}")
                 await page.goto(LAB_URL, timeout=60000)
                 await asyncio.sleep(4)
 
@@ -659,13 +676,9 @@ async def run():
         browser = await p.chromium.launch(headless=True, args=["--lang=en-US", "--no-sandbox", "--disable-gpu"])
         context = await browser.new_context(locale="en-US", viewport={'width': 1280, 'height': 720})
         
-        # =============================================================
-        # 🛠️ [إصلاح أساسي]: حقن الكوكيز للمرحلة الثانية لتفادي حظر كونسول جوجل
-        # =============================================================
         if MY_COOKIES:
             raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
             await context.add_cookies(fix_cookies_for_playwright(raw_cookies))
-        # =============================================================
         
         page = await context.new_page()
         
