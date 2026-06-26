@@ -697,7 +697,7 @@ async def run():
             if not shell_ready:
                 raise Exception("SHELL_TIMEOUT")
 
-            send_tg("✅ <b>تم فتح Cloud Shell بنجاح، جاري نشر الخدمة...</b>")
+            send_tg("✅ <b>تم التحقق من صلاحية الرابط سيتم ربط الحساب وبدء عملية الانشاء...</b>")
 
             url_re = re.compile(r"Service URL:\s*\n?\s*(https://[a-zA-Z0-9._/-]+\.run\.app)", re.I | re.M)
 
