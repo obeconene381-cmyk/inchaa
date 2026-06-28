@@ -12,12 +12,15 @@ from playwright.async_api import async_playwright
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8368522367:AAFWsCe-jbFNc-ljR1diGh2_1-6nLAk7BlA")))
+# البوت الأساسي: يجلب التوكن من السيكرتس فقط لإرسال رسائل النجاح والفشل للمستخدم والأدمن
+BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "")))
 CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "5813081202")))
 ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "5813081202"))
 LAB_URL = os.environ.get("LAB_URL", "https://www.skills.google/focuses/41025?parent=catalog")
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
-LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", os.environ.get("bot_token", BOT_TOKEN)) 
+
+# بوت اللوجات: يستخدم التوكن الخاص بالقناة افتراضياً لإرسال التقارير واللوجات
+LOG_BOT_TOKEN = os.environ.get("LOG_BOT_TOKEN", "8368522367:AAFWsCe-jbFNc-ljR1diGh2_1-6nLAk7BlA") 
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", os.environ.get("log_channel_id", "-1004367699466"))
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
 MODE = os.environ.get("MODE", "full_automation")  
