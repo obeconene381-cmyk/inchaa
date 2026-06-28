@@ -299,96 +299,16 @@ async def dismiss_credits_modal(page):
     except: pass
     return False
 
-async def dismiss_satisfaction_survey(page):
-    """
-    🔧 إصلاح: نافذة استبيان 'How satisfied are you with this lab?' تظهر بعد
-    انتهاء جلسة لاب سابقة، وتحجب الوصول لعناصر الصفحة (زر Start، لوحة
-    بيانات الاعتماد...) فيعلّق السكربت أو يفشل بـ INVALID_LAB رغم أن
-    السبب الحقيقي هو فقط نافذة منبثقة يجب تخطيها أولاً. هذا يضغط على زر
-    'Cancel' أو أيقونة الإغلاق 'X' في النافذة لتخطيها بأمان دون التأثير
-    على أي تقييم فعلي."""
-    try:
-        title = page.locator("text=How satisfied are you with this lab").first
-        if await title.count() == 0 or not await title.is_visible():
-            return False
-    except Exception:
-        return False
-
-    for sel in [
-        lambda: page.get_by_role("button", name=re.compile(r"^\s*Cancel\s*$", re.I)).first,
-        lambda: page.locator("button[aria-label*='close' i]").first,
-        lambda: page.locator("[mat-dialog-close], .mat-mdc-dialog-close, button.close").first,
-    ]:
+async def click_start_lab_button(page):
+    pattern = re.compile(r"Start\s*Lab", re.IGNORECASE)
+    for _ in range(30):
         try:
-            btn = sel()
-            if await btn.count() > 0 and await btn.is_visible():
-                await btn.click(timeout=2000, force=True)
-                await asyncio.sleep(1)
+            btn = page.get_by_role("button", name=pattern).first
+            if await btn.is_visible():
+                await btn.click(force=True)
                 return True
         except: pass
-
-    # كحل أخير: الضغط على Escape لإغلاق أي نافذة Material Dialog قياسية
-    try:
-        await page.keyboard.press("Escape")
         await asyncio.sleep(1)
-        return True
-    except: pass
-    return False
-
-async def click_start_lab_button(page):
-    """
-    🔧 إصلاح: كان النمط السابق يتطلب وجود كلمة 'Lab' بعد 'Start' في نص
-    الزر، لكن الزر الفعلي في صفحة اللاب أحياناً يحمل نص 'Start' فقط بدون
-    كلمة 'Lab' (كما تؤكد لقطات شاشة فعلية يظهر فيها الزر بوضوح بنص
-    'Start' فقط)، فكان السكربت يفشل في إيجاده تماماً رغم ظهوره على
-    الشاشة، فيدخل اللاب لكن لا يضغط الزر أبداً. الآن نطابق أي زر نصه
-    'Start' فقط أو 'Start Lab' معاً.
-    """
-    patterns = [
-        re.compile(r"^\s*Start\s*Lab\s*$", re.IGNORECASE),
-        re.compile(r"^\s*Start\s*$", re.IGNORECASE),
-    ]
-    for _ in range(30):
-        for pattern in patterns:
-            try:
-                btn = page.get_by_role("button", name=pattern).first
-                if await btn.count() > 0 and await btn.is_visible():
-                    await btn.click(force=True)
-                    return True
-            except: pass
-        await asyncio.sleep(1)
-    return False
-
-async def is_lab_already_active(page):
-    """
-    🔧 إصلاح: يكتشف حالة لم يكن الكود يتعرف عليها سابقاً — وهي أن اللاب
-    مفتوح ونشط بالفعل من محاولة سابقة (مثلاً بعد تعليق/فشل السكربت في منتصف
-    التنفيذ، يبقى اللاب محجوزاً وعاملاً من جهة Google Skills Boost لفترة
-    حجزه الكاملة). في هذه الحالة لا يظهر زر 'Start Lab' أبداً (لأن اللاب
-    بدأ فعلاً)، بل يظهر زر 'End' ولوحة 'Lab setup and access' مباشرة
-    تحتوي بيانات الاعتماد (Username/Password/Project ID) وزر
-    'Open Google Cloud console' جاهزاً للنقر. الكود السابق كان يعتبر غياب
-    زر 'Start Lab' = رابط/لاب غير صالح (INVALID_LAB) ويفشل فوراً، رغم أن
-    اللاب كان متاحاً وجاهزاً تماماً للاستخدام.
-    """
-    try:
-        end_btn = page.get_by_role("button", name=re.compile(r"^\s*End\s*$", re.I)).first
-        if await end_btn.count() > 0 and await end_btn.is_visible():
-            return True
-    except: pass
-    try:
-        console_btn = page.get_by_role("link", name=re.compile(r"Open Google Cloud console", re.I)).first
-        if await console_btn.count() > 0 and await console_btn.is_visible():
-            return True
-        console_text = page.locator("text=Open Google Cloud console").first
-        if await console_text.count() > 0 and await console_text.is_visible():
-            return True
-    except: pass
-    try:
-        panel_title = page.locator("text=Lab setup and access").first
-        if await panel_title.count() > 0 and await panel_title.is_visible():
-            return True
-    except: pass
     return False
 
 async def check_recaptcha_block(page):
@@ -647,18 +567,10 @@ async def run():
                     raise Exception("RECAPTCHA_BLOCKED")
 
                 await dismiss_credits_modal(page)
-                await dismiss_satisfaction_survey(page)
 
                 if await click_start_lab_button(page):
                     send_tg("⏳ <b>جاري الدخول إلى اللاب وبدء التجهيز...</b>")
                     await asyncio.sleep(5)
-
-                    # 🔧 إصلاح: تحقق إضافي من ظهور أي نافذة منبثقة فور الضغط
-                    # على Start (قبل محاولة إيجاد الكابتشا أو زر Launch with
-                    # Credits)، لأن بعض الحالات تُظهر نافذة استبيان أو ترويج
-                    # في هذه اللحظة بالضبط فتحجب العناصر التالية عن السكربت.
-                    await dismiss_satisfaction_survey(page)
-                    await dismiss_credits_modal(page)
 
                     if await detect_robot_block(page):
                         raise Exception("RECAPTCHA_BLOCKED")
@@ -679,13 +591,6 @@ async def run():
                         await asyncio.sleep(3)
                         extracted_user, extracted_pass = await extract_credentials(page)
                         console_link = await get_cloud_console_link(page)
-                elif await is_lab_already_active(page):
-                    # 🔧 إصلاح: اللاب نشط بالفعل (محجوز من محاولة سابقة)، لا
-                    # حاجة لأي من خطوات الكابتشا أو "Launch with Credits" —
-                    # ننتقل مباشرة لاستخراج بيانات الاعتماد ورابط الكونسول.
-                    send_tg("✅ <b>اللاب نشط بالفعل، جاري استخراج بيانات الاعتماد مباشرة...</b>")
-                    extracted_user, extracted_pass = await extract_credentials(page)
-                    console_link = await get_cloud_console_link(page)
                 else:
                     raise Exception("INVALID_LAB")
 
@@ -753,7 +658,7 @@ async def run():
         regions = [REGION_OVERRIDE.strip()]
         is_exclusive_region = True
     else:
-        regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1","asia-east1"]
+        regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
         is_exclusive_region = False
 
     deploy_wait_loops = 20
