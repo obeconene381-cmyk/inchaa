@@ -753,7 +753,7 @@ async def run():
         regions = [REGION_OVERRIDE.strip()]
         is_exclusive_region = True
     else:
-        regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1"]
+        regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1","asia-east1"]
         is_exclusive_region = False
 
     deploy_wait_loops = 20
