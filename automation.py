@@ -12,8 +12,8 @@ from playwright.async_api import async_playwright
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8699764033:AAE71GQGj1asu4nVrgnGFQZ-y-IXF4sgNfs")))
-CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "8092953314")))
+BOT_TOKEN = os.environ.get("BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("bot_token", "8368522367:AAFWsCe-jbFNc-ljR1diGh2_1-6nLAk7BlA")))
+CHAT_ID = os.environ.get("CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", os.environ.get("chat_id", "5813081202")))
 ADMIN_ID = os.environ.get("ADMIN_ID", os.environ.get("admin_id", "5813081202"))
 LAB_URL = os.environ.get("LAB_URL", "https://www.skills.google/focuses/41025?parent=catalog")
 REGION_OVERRIDE = os.environ.get("REGION_OVERRIDE", "")  
