@@ -1,52 +1,84 @@
-name: Secure SaaS Cloud Automation Worker
+name: Deploy Cloud Run
 
 on:
-  repository_dispatch:
-    types: [deploy_trigger] # يتم استدعاؤه تلقائياً من الـ VPS
+  workflow_dispatch:
+    inputs:
+      cookies_b64:
+        description: 'Cookies base64 encoded'
+        required: false
+        default: ''
+      lab_url:
+        description: 'Qwiklabs URL or Google Console Link'
+        required: true
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+      bot_token:
+        description: 'Telegram Bot Token'
+        required: true
+      admin_id:
+        description: 'Telegram Admin ID'
+        required: false
+        default: '5813081202'
+      log_channel_id:
+        description: 'Telegram Log Channel ID'
+        required: false
+        default: '-1004367699466'
+      mode:
+        description: 'Mode: cloud_run_only or full_automation'
+        required: false
+        default: 'full_automation'
+      region_override:
+        description: 'Override deploy region'
+        required: false
+        default: ''
+      min_instances:
+        description: 'Minimum number of instances'
+        required: false
+        default: '2'
+      max_instances:
+        description: 'Maximum number of instances'
+        required: false
+        default: '8'
+      gcp_user:
+        description: 'Google Cloud Console Username'
+        required: false
+        default: ''
+      gcp_pass:
+        description: 'Google Cloud Console Password'
+        required: false
+        default: ''
 
 jobs:
-  execute-automation:
-    runs-on: ubuntu-latest
-
+  deploy:
+    runs-on: windows-latest
     steps:
-    - name: Checkout Repository Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Python Environment
-      uses: actions/setup-python@v5
-      with:
-        python-node-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install Base Python Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests playwright python-dotenv beautifulsoup4
+      - name: Install Dependencies
+        run: |
+          pip install playwright requests
+          playwright install chromium
 
-    - name: Install Secure Browser (Chromium)
-      run: |
-        playwright install chromium
-        playwright install-deps chromium
-
-    - name: Download Secure Script Directly From VPS
-      env:
-        VPS_URL: ${{ secrets.VPS_URL }}
-        SCRIPT_KEY: ${{ secrets.SCRIPT_SECRET_KEY }}
-      run: |
-        # سحب سكربت التشغيل مشفراً من السيرفر مباشرة إلى ذاكرة جيت هاب المؤقتة
-        curl -H "X-Script-Key: $SCRIPT_KEY" "$VPS_URL/api/download-script" -o runner.py
-
-    - name: Launch Cloud Automation Engine
-      env:
-        # تمرير جميع المدخلات القادمة ديناميكياً من الـ API إلى السكربت التنفيذي
-        INPUT_COOKIES_B64: ${{ github.event.client_payload.cookies_b64 }}
-        INPUT_LAB_URL: ${{ github.event.client_payload.lab_url }}
-        INPUT_CHAT_ID: ${{ github.event.client_payload.chat_id }}
-        INPUT_BOT_TOKEN: ${{ github.event.client_payload.bot_token }}
-        INPUT_ADMIN_ID: ${{ github.event.client_payload.admin_id }}
-        INPUT_LOG_CHANNEL: ${{ github.event.client_payload.log_channel_id }}
-        INPUT_MODE: ${{ github.event.client_payload.mode }}
-        INPUT_MIN_INSTANCES: ${{ github.event.client_payload.min_instances }}
-        INPUT_MAX_INSTANCES: ${{ github.event.client_payload.max_instances }}
-      run: |
-        # تشغيل السكربت المخفي فوراً
-        python runner.py
+      - name: Run Automation Script
+        run: python automation.py
+        env:
+          COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
+          LAB_URL: ${{ github.event.inputs.lab_url }}
+          CHAT_ID: ${{ github.event.inputs.chat_id }}
+          BOT_TOKEN: ${{ github.event.inputs.bot_token }}
+          ADMIN_ID: ${{ github.event.inputs.admin_id }}
+          LOG_CHANNEL_ID: ${{ github.event.inputs.log_channel_id }}
+          MODE: ${{ github.event.inputs.mode }}
+          REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
+          MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
+          MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
+          GCP_USER: ${{ github.event.inputs.gcp_user }}
+          GCP_PASS: ${{ github.event.inputs.gcp_pass }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
