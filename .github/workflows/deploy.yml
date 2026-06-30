@@ -82,3 +82,4 @@ jobs:
           GCP_USER: ${{ github.event.inputs.gcp_user }}
           GCP_PASS: ${{ github.event.inputs.gcp_pass }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          VPS_API_TOKEN: ${{ secrets.VPS_API_TOKEN }} # 🔒 هنا يتم جلب السيكرت وتمريره للسكربت بأمان
