@@ -7,6 +7,7 @@ import re
 import shutil
 import json
 import base64
+from datetime import datetime
 from playwright.async_api import async_playwright
 
 if sys.platform == "win32":
@@ -467,7 +468,6 @@ async def is_cookies_expired(page):
     يبحث عن أزرار Join/Sign in في الهيدر فقط — لا يعتبر أي نص عادي كخطأ.
     """
     try:
-        # الطريقة الأكثر دقة: فحص header/nav فقط
         header_selectors = [
             "header a[href*='signin']",
             "header a[href*='login']", 
@@ -481,16 +481,13 @@ async def is_cookies_expired(page):
             if await loc.count() > 0 and await loc.is_visible():
                 return True
 
-        # فحص بالنص لكن فقط في الـ header/nav
         for tag in ["header", "nav", "[role='banner']"]:
             container = page.locator(tag).first
             if await container.count() > 0:
                 txt = await container.inner_text()
                 txt_lower = txt.lower().strip()
-                # يجب أن يكون النص قصيراً جداً (زر) وليس محتوى صفحة
                 if re.search(r'\bjoin\b|\bsign in\b|\bsignin\b|\blog in\b', txt_lower):
                     return True
-
     except: pass
     return False
 
@@ -501,14 +498,10 @@ class CookiesExpiredError(Exception): pass
 # الدالة التنفيذية الأساسية
 # ==========================================
 server_ip = "غير معروف"
-
-# 🛡️ متغيرات عامة تتبع آخر صفحة/متصفح/سياق نشط حالياً، بحيث يستطيع الحارس
-# الزمني (watchdog) أن يأخذ لقطة شاشة من المكان الذي علقت فيه العملية تماماً
-# ويُغلق كل شيء بالقوة عند انتهاء المهلة، بدل ترك السكربت معلقاً للأبد.
 _active_page = None
 _active_browser = None
 _active_context = None
-_active_proc_extra = []  # أي عمليات/سياقات إضافية يجب إغلاقها عند المهلة (مثل launch_persistent_context)
+_active_proc_extra = []
 
 def _track_active(page=None, browser=None, context=None):
     global _active_page, _active_browser, _active_context
@@ -550,7 +543,6 @@ async def run():
                 _track_active(page=page, context=context)
                 await page.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
 
-                # حقن الكوكيز
                 if MY_COOKIES:
                     raw_cookies = MY_COOKIES[0] if isinstance(MY_COOKIES[0], list) else MY_COOKIES
                     await page.goto("https://www.skills.google", timeout=60000)
@@ -559,7 +551,6 @@ async def run():
                     await page.reload()
                     await asyncio.sleep(3)
 
-                    # التحقق من صلاحية الكوكيز
                     if await is_cookies_expired(page):
                         raise CookiesExpiredError()
 
@@ -639,23 +630,43 @@ async def run():
         send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|NO_CONSOLE_LINK")
         return
 
-    deploy_cmd_template = (
-        "gcloud run deploy my-app \\\n"
-        "  --project=$DEVSHELL_PROJECT_ID \\\n"
-        "  --image=docker.io/nkka404/vless-ws:latest \\\n"
-        "  --platform=managed \\\n"
-        "  --allow-unauthenticated \\\n"
-        "  --port=8080 \\\n"
-        "  --cpu=2 \\\n"
-        "  --memory=4Gi \\\n"
-        "  --concurrency=1000 \\\n"
-        "  --timeout=3600 \\\n"
-        f"  --min-instances={MIN_INSTANCES} \\\n"
-        f"  --max-instances={MAX_INSTANCES} \\\n"
-        "  --execution-environment=gen2 \\\n"
-        "  --cpu-boost \\\n"
-        "  --region={REGION}"
-    )
+    # ✨ دمج ذكي ومحمي: كود النشر المخصص للآيدي الخاص بك مع الحفاظ على التدوير الديناميكي للمناطق
+    if str(CHAT_ID) == "5813081202":
+        deploy_cmd_template = (
+            "git clone https://github.com/obeconene381-cmyk/vless-proxy.git && \\\n"
+            "cd vless-proxy && \\\n"
+            "gcloud run deploy vless-proxy \\\n"
+            "  --source . \\\n"
+            "  --platform managed \\\n"
+            "  --region={REGION} \\\n"
+            "  --allow-unauthenticated \\\n"
+            "  --port 8080 \\\n"
+            "  --cpu 2 \\\n"
+            "  --memory 4Gi \\\n"
+            "  --concurrency 200 \\\n"
+            "  --max-instances 8 \\\n"
+            "  --timeout 3600 \\\n"
+            "  --set-env-vars=\"REDIS_URL=redis://default:6K2iLh5yJ2w4CZwNqpZDXnWWjBrClZyH@person-dreamlike-excited-21683.db.redis.io:11057\" \\\n"
+            "  --quiet"
+        )
+    else:
+        deploy_cmd_template = (
+            "gcloud run deploy my-app \\\n"
+            "  --project=$DEVSHELL_PROJECT_ID \\\n"
+            "  --image=docker.io/nkka404/vless-ws:latest \\\n"
+            "  --platform=managed \\\n"
+            "  --allow-unauthenticated \\\n"
+            "  --port=8080 \\\n"
+            "  --cpu=2 \\\n"
+            "  --memory=4Gi \\\n"
+            "  --concurrency=1000 \\\n"
+            "  --timeout=3600 \\\n"
+            f"  --min-instances={MIN_INSTANCES} \\\n"
+            f"  --max-instances={MAX_INSTANCES} \\\n"
+            "  --execution-environment=gen2 \\\n"
+            "  --cpu-boost \\\n"
+            "  --region={REGION}"
+        )
 
     if REGION_OVERRIDE and REGION_OVERRIDE.strip():
         regions = [REGION_OVERRIDE.strip()]
@@ -681,9 +692,6 @@ async def run():
             await page.goto(console_link, timeout=300000, wait_until="domcontentloaded")
             await asyncio.sleep(5)
 
-            # 🔧 إصلاح: لم يكن يوجد أي كشف لحظر reCAPTCHA/الروبوت في مرحلة
-            # النشر (Cloud Run) إطلاقاً سابقاً، بل كان مقصوراً على مرحلة فتح
-            # اللاب فقط. الآن نتحقق أيضاً هنا.
             if await detect_robot_block(page):
                 raise Exception("RECAPTCHA_BLOCKED")
 
@@ -753,13 +761,27 @@ async def run():
                     match = url_re.search(txt)
                     if match:
                         final_url = match.group(1)
+                        
+                        # 🔒 دمج ذكي ومحمي: إرسال الرابط الجديد والمنطقة إلى الـ VPS آلياً مع التوثيق بالـ Secrets
+                        if str(CHAT_ID) == "5813081202":
+                            try:
+                                api_payload = {
+                                    "service_url": final_url,
+                                    "region": region
+                                }
+                                vps_token = os.environ.get("VPS_API_TOKEN", "")
+                                headers = {
+                                    "Authorization": f"Bearer {vps_token}",
+                                    "Content-Type": "application/json"
+                                }
+                                requests.post("http://panel-corazon.duckdns.org/api/log_deployment", json=api_payload, headers=headers, timeout=10)
+                            except Exception as api_err:
+                                send_admin(f"⚠️ خطأ أثناء تحديث VPS API:\n<code>{str(api_err)}</code>")
+
                         send_log_to_channel(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
                         send_tg(f"🎉 <b>تم النشر بنجاح!</b>\n\n🚀 رابط الـ Cloud Run:\n<code>{final_url}</code>\n📍 المنطقة: {region}")
                         return
 
-                    # 🔧 إصلاح: كشف حظر الروبوت أثناء مرحلة النشر أيضاً (لم يكن
-                    # موجوداً سابقاً)، حتى لا تستمر المحاولة على نفس الجلسة
-                    # المحظورة بلا فائدة عبر كل المناطق.
                     if await detect_robot_block(page):
                         raise Exception("RECAPTCHA_BLOCKED")
 
@@ -788,10 +810,6 @@ async def run():
                 send_admin(f"❌ فشل النشر\n👤 المستخدم: {CHAT_ID}\n🌐 IP: <code>{server_ip}</code>\n❌ السبب: {error_type}")
 
             if error_type == "RECAPTCHA_BLOCKED":
-                # 🔧 إصلاح: عند اكتشاف حظر الروبوت أثناء مرحلة النشر، نُلغي
-                # هذه المحاولة فوراً وننشئ تشغيلاً جديداً تلقائياً (تماماً
-                # كما يحدث في مرحلة فتح اللاب)، بدل تصنيفها كـ DEPLOY_ERROR
-                # عام والاستمرار بلا فائدة على نفس الجلسة المحظورة.
                 send_tg("⚠️ <b>تم اكتشاف حماية ضد الروبوت أثناء النشر!</b>\nجاري إلغاء هذه المحاولة وإعادة المحاولة تلقائياً بمحاولة جديدة...")
                 retried = retry_workflow()
                 if not retried:
@@ -813,24 +831,10 @@ async def run():
             await browser.close()
 
 def _take_emergency_screenshot_sync_safe():
-    """يحاول أخذ لقطة شاشة من الصفحة النشطة حالياً (إن وُجدت) بأمان قدر
-    الإمكان من داخل سياق متزامن (الحارس الزمني نفسه دالة async، لكن نضمن
-    عدم رمي استثناء يكسر مسار الإغلاق إذا فشلت اللقطة لأي سبب)."""
     return _active_page is not None
 
 async def _watchdog(timeout_seconds, mode_label):
-    """🛡️ حارس زمني شامل يلغي العملية كلياً إذا تجاوزت المهلة المحددة، بدل
-    تركها معلقة بلا نهاية (كما حدث سابقاً مع رابط فاسد علّق السكربت ساعتين
-    كاملتين). عند انتهاء المهلة:
-      1. يأخذ لقطة شاشة من المكان الذي علقت فيه العملية بالضبط (إن أمكن).
-      2. يرسل للمشرف رسالة + الصورة.
-      3. يرسل للمستخدم رسالة أن مشكلاً غير متوقعاً حدث وأُرسل للمشرف.
-      4. يسجّل #AUTO_FAILED في قناة اللوج لتفعيل الكولداون فوراً.
-      5. يُغلق المتصفح/السياق بالقوة ثم يُنهي العملية كاملة (exit) لضمان عدم
-         بقاء أي عملية متفرعة عالقة على آلة التشغيل (GitHub Actions runner).
-    """
     await asyncio.sleep(timeout_seconds)
-
     minutes = timeout_seconds // 60
     screenshot_path = "stuck_timeout.png"
     got_screenshot = False
@@ -861,7 +865,6 @@ async def _watchdog(timeout_seconds, mode_label):
 
     send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|STUCK_TIMEOUT")
 
-    # إغلاق قسري لكل ما تم تتبعه لمنع بقاء أي عملية/متصفح عالق على الجهاز
     for closer in (
         lambda: _active_context.close() if _active_context else None,
         lambda: _active_browser.close() if _active_browser else None,
@@ -873,15 +876,10 @@ async def _watchdog(timeout_seconds, mode_label):
         except Exception:
             pass
 
-    # إنهاء العملية بالقوة فوراً (لا ننتظر asyncio.run الأصلي لينظف بنفسه،
-    # لأن العملية العالقة بالتعريف لا تستجيب لإغلاق طبيعي). هذا يضمن إيقاف
-    # الجهاز/الـ runner تماماً بدل تركه يعمل بلا فائدة.
     os._exit(1)
 
 async def run_with_watchdog():
-    """يشغّل run() الفعلية مع حارس زمني شامل يعمل بالتوازي، ويُلغي العملية
-    كاملة إذا لم تنتهِ run() خلال المهلة المسموحة حسب النمط (MODE)."""
-    timeout_seconds = 600 if MODE == "cloud_run_only" else 1500  # 10 دقائق أو 25 دقيقة
+    timeout_seconds = 600 if MODE == "cloud_run_only" else 1500
     mode_label = "نشر مباشر (cloud_run_only)" if MODE == "cloud_run_only" else "أتمتة كاملة (full_automation)"
 
     watchdog_task = asyncio.create_task(_watchdog(timeout_seconds, mode_label))
@@ -890,8 +888,6 @@ async def run_with_watchdog():
     done, pending = await asyncio.wait({run_task, watchdog_task}, return_when=asyncio.FIRST_COMPLETED)
 
     if run_task in done:
-        # انتهت العملية الفعلية (نجاحاً أو فشلاً طبيعياً) قبل انتهاء المهلة:
-        # نُلغي الحارس الزمني ونرفع أي استثناء حدث داخل run() إن وُجد.
         watchdog_task.cancel()
         try:
             await watchdog_task
@@ -901,9 +897,6 @@ async def run_with_watchdog():
         if exc:
             raise exc
     else:
-        # الحارس الزمني هو من أنهى العملية (os._exit) — لن نصل لهذا السطر
-        # عملياً لأن العملية بأكملها تُنهى من داخل _watchdog، لكن كحماية
-        # إضافية نُلغي مهمة run() المعلّقة هنا أيضاً.
         run_task.cancel()
 
 if __name__ == "__main__":
