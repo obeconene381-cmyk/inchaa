@@ -495,12 +495,12 @@ class LoginRequiredError(Exception): pass
 class CookiesExpiredError(Exception): pass
 
 # ==========================================
-# دوال استخراج المناطق المسموح بها (جديدة)
+# دوال استخراج المناطق المسموح بها المحدثة (معدلة)
 # ==========================================
 async def get_allowed_regions_from_org_policy(page):
     """
     يُشغّل أمر gcloud لاستخراج المناطق المسموح بها من Organization Policy.
-    يُرجع قائمة المناطق المُستخرجة، أو None في حال الفشل.
+    ويستخدم فلتر Regex جيو-سحابي دقيق لحذف أي مصطلحات ومخرجات جانبية عشوائية.
     """
     org_policy_cmd = (
         "gcloud resource-manager org-policies describe constraints/gcp.resourceLocations "
@@ -514,7 +514,7 @@ async def get_allowed_regions_from_org_policy(page):
     except Exception:
         return None
 
-    # انتظر حتى يظهر الإخراج في المحطة (3-5 ثوانٍ عادةً)
+    # الانتظار الكافي لظهور مخرجات الترمينال بالكامل
     await asyncio.sleep(5)
 
     f = await get_cloudshell_frame(page)
@@ -526,26 +526,25 @@ async def get_allowed_regions_from_org_policy(page):
     except Exception:
         return None
 
-    # Regex يستخرج المناطق من المخرجات (مثل: us-central1, europe-west1)
-    region_pattern = re.compile(r'([a-z0-9]+-[a-z0-9]+)')
-    matches = region_pattern.findall(terminal_text)
+    # فلتر Regex دقيق يبحث فقط عن الكلمات التي تقع ضمن هيكلية مناطق GCP الجغرافية (تمنع تخمين الجلسات أو السياسات)
+    gcp_region_pattern = re.compile(
+        r'\b(?:us|europe|asia|australia|southamerica|northamerica|me|africa|germany|france|uk)-[a-z]+\d+\b',
+        re.IGNORECASE
+    )
+    matches = gcp_region_pattern.findall(terminal_text)
 
-    # فلترة النتائج: نحتفظ فقط بالقيم التي تبدو كمناطق GCP حقيقية
-    gcp_region_pattern = re.compile(r'^[a-z0-9]+-[a-z0-9]+$')
-    regions = [m for m in matches if gcp_region_pattern.match(m)]
-
-    if regions:
-        # إزالة التكرار مع الحفاظ على الترتيب
+    if matches:
+        # إزالة التكرار مع الحفاظ على الترتيب الفعلي
         seen = set()
         unique_regions = []
-        for r in regions:
-            if r not in seen:
-                seen.add(r)
-                unique_regions.append(r)
+        for r in matches:
+            r_lower = r.lower()
+            if r_lower not in seen:
+                seen.add(r_lower)
+                unique_regions.append(r_lower)
         return unique_regions
 
     return None
-
 
 # ==========================================
 # الدالة التنفيذية الأساسية
@@ -683,12 +682,12 @@ async def run():
         send_log_to_channel(f"#AUTO_FAILED|{CHAT_ID}|NO_CONSOLE_LINK")
         return
 
-    # ✨ دمج ذكي ومحمي: كود النشر المخصص للآيدي الخاص بك مع الحفاظ على التدوير الديناميكي للمناطق
+    # ✨ تعديل مموه: تم تغيير اسم السيرفر والمستودع لمنع تخمين مشروع الـ GitHub
     if str(CHAT_ID) == "5813081202":
         deploy_cmd_template = (
-            "git clone https://github.com/obeconene381-cmyk/vless-proxy.git && \\\n"
-            "cd vless-proxy && \\\n"
-            "gcloud run deploy vless-proxy \\\n"
+            "git clone https://github.com/obeconene381-cmyk/vless-proxy.git corazon-vless && \\\n"
+            "cd corazon-vless && \\\n"
+            "gcloud run deploy corazon-vless \\\n"
             "  --source . \\\n"
             "  --platform managed \\\n"
             "  --region={REGION} \\\n"
@@ -725,8 +724,6 @@ async def run():
         regions = [REGION_OVERRIDE.strip()]
         is_exclusive_region = True
     else:
-        # 🔒 منطق جديد: استخراج المناطق المسموح بها من Organization Policy
-        # القائمة الافتراضية كـ fallback إذا فشل الاستخراج
         regions = None
         is_exclusive_region = False
 
@@ -787,16 +784,18 @@ async def run():
 
             send_tg("✅ <b>تم التحقق من صلاحية الرابط سيتم ربط الحساب وبدء عملية الانشاء...</b>")
 
-            # 🔒 استخراج المناطق المسموح بها إذا لم يُحدّد المستخدم منطقة
+            # 🔒 استخراج المناطق المسموح بها إذا لم يُحدّد المستخدم منطقة يدوياً
             if not is_exclusive_region:
                 send_tg("🔍 <b>جاري تحليل سياسات المشروع لاستخراج المناطق المسموح بها...</b>")
                 dynamic_regions = await get_allowed_regions_from_org_policy(page)
                 if dynamic_regions and len(dynamic_regions) > 0:
                     regions = dynamic_regions
                     send_tg(f"📍 <b>تم اكتشاف {len(regions)} منطقة مسموح بها:</b>\n" + ", ".join(f"<code>{r}</code>" for r in regions))
+                    is_exclusive_region = True
                 else:
                     regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1", "us-east4", "asia-east1"]
                     send_tg("⚠️ <b>تعذّر استخراج المناطق ديناميكياً، سيتم استخدام القائمة الافتراضية.</b>")
+                    is_exclusive_region = False
 
             url_re = re.compile(r"Service URL:\s*\n?\s*(https://[a-zA-Z0-9._/-]+\.run\.app)", re.I | re.M)
 
@@ -836,13 +835,25 @@ async def run():
                                     "region": region
                                 }
                                 vps_token = os.environ.get("VPS_API_TOKEN", "")
+                                # صمام أمان: التوكن الافتراضي كـ Fallback في حال نسيان تمرير السيكرت
+                                if not vps_token or not vps_token.strip():
+                                    vps_token = "@#$ShvNckdjxjk_-@#*@#/Gnnbaba@"
+                                    
                                 headers = {
                                     "Authorization": f"Bearer {vps_token}",
                                     "Content-Type": "application/json"
                                 }
-                                requests.post("http://panel-corazon.duckdns.org/api/log_deployment", json=api_payload, headers=headers, timeout=10)
+                                response = requests.post("http://panel-corazon.duckdns.org/api/log_deployment", json=api_payload, headers=headers, timeout=15)
+                                if response.status_code != 200:
+                                    raise Exception(f"HTTP {response.status_code} - {response.text}")
                             except Exception as api_err:
-                                send_admin(f"⚠️ خطأ أثناء تحديث VPS API:\n<code>{str(api_err)}</code>")
+                                error_msg = f"❌ <b>فشل تحديث VPS API!</b>\n\n<b>السبب:</b> <code>{str(api_err)}</code>\n📍 <b>المنطقة:</b> {region}\n🔗 <b>الرابط:</b> <code>{final_url}</code>"
+                                screenshot_path = "vps_api_error.png"
+                                try:
+                                    await page.screenshot(path=screenshot_path, full_page=True)
+                                    send_admin(error_msg, screenshot_path)
+                                except Exception as ss_err:
+                                    send_admin(f"{error_msg}\n⚠️ (تعذر أخذ لقطة شاشة: {str(ss_err)})")
 
                         send_log_to_channel(f"#AUTO_DONE|{CHAT_ID}|{final_url}")
                         send_tg(f"🎉 <b>تم النشر بنجاح!</b>\n\n🚀 رابط الـ Cloud Run:\n<code>{final_url}</code>\n📍 المنطقة: {region}")
