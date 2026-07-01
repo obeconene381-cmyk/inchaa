@@ -10,7 +10,7 @@ if not vps_token or not vps_token.strip():
     sys.exit(1)
 
 # رابط السحب المباشر من الدومين الخاص بك
-url = "http://panel-corazon.duckdns.org/api/get_script"
+url = "https://panel-corazon.duckdns.org/api/get_script"
 headers = {"Authorization": f"Bearer {vps_token}"}
 
 try:
