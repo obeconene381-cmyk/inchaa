@@ -495,6 +495,59 @@ class LoginRequiredError(Exception): pass
 class CookiesExpiredError(Exception): pass
 
 # ==========================================
+# دوال استخراج المناطق المسموح بها (جديدة)
+# ==========================================
+async def get_allowed_regions_from_org_policy(page):
+    """
+    يُشغّل أمر gcloud لاستخراج المناطق المسموح بها من Organization Policy.
+    يُرجع قائمة المناطق المُستخرجة، أو None في حال الفشل.
+    """
+    org_policy_cmd = (
+        "gcloud resource-manager org-policies describe constraints/gcp.resourceLocations "
+        "--project=$DEVSHELL_PROJECT_ID "
+        "--format=\"value(listPolicy.allowedValues)\" 2>/dev/null | "
+        "tr ';' '\\n' | "
+        "grep -oP 'in:\\K[a-z0-9]+-[a-z0-9]+(?=-locations)'"
+    )
+    try:
+        await paste_command_and_run(page, org_policy_cmd)
+    except Exception:
+        return None
+
+    # انتظر حتى يظهر الإخراج في المحطة (3-5 ثوانٍ عادةً)
+    await asyncio.sleep(5)
+
+    f = await get_cloudshell_frame(page)
+    if not f:
+        return None
+
+    try:
+        terminal_text = await f.inner_text("body")
+    except Exception:
+        return None
+
+    # Regex يستخرج المناطق من المخرجات (مثل: us-central1, europe-west1)
+    region_pattern = re.compile(r'([a-z0-9]+-[a-z0-9]+)')
+    matches = region_pattern.findall(terminal_text)
+
+    # فلترة النتائج: نحتفظ فقط بالقيم التي تبدو كمناطق GCP حقيقية
+    gcp_region_pattern = re.compile(r'^[a-z0-9]+-[a-z0-9]+$')
+    regions = [m for m in matches if gcp_region_pattern.match(m)]
+
+    if regions:
+        # إزالة التكرار مع الحفاظ على الترتيب
+        seen = set()
+        unique_regions = []
+        for r in regions:
+            if r not in seen:
+                seen.add(r)
+                unique_regions.append(r)
+        return unique_regions
+
+    return None
+
+
+# ==========================================
 # الدالة التنفيذية الأساسية
 # ==========================================
 server_ip = "غير معروف"
@@ -672,7 +725,9 @@ async def run():
         regions = [REGION_OVERRIDE.strip()]
         is_exclusive_region = True
     else:
-        regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1","us-east4","asia-east1"]
+        # 🔒 منطق جديد: استخراج المناطق المسموح بها من Organization Policy
+        # القائمة الافتراضية كـ fallback إذا فشل الاستخراج
+        regions = None
         is_exclusive_region = False
 
     deploy_wait_loops = 20
@@ -731,6 +786,17 @@ async def run():
                 raise Exception("SHELL_TIMEOUT")
 
             send_tg("✅ <b>تم التحقق من صلاحية الرابط سيتم ربط الحساب وبدء عملية الانشاء...</b>")
+
+            # 🔒 استخراج المناطق المسموح بها إذا لم يُحدّد المستخدم منطقة
+            if not is_exclusive_region:
+                send_tg("🔍 <b>جاري تحليل سياسات المشروع لاستخراج المناطق المسموح بها...</b>")
+                dynamic_regions = await get_allowed_regions_from_org_policy(page)
+                if dynamic_regions and len(dynamic_regions) > 0:
+                    regions = dynamic_regions
+                    send_tg(f"📍 <b>تم اكتشاف {len(regions)} منطقة مسموح بها:</b>\n" + ", ".join(f"<code>{r}</code>" for r in regions))
+                else:
+                    regions = ["europe-west12", "europe-west1", "europe-west4", "us-west1", "us-central1", "us-east1", "us-east4", "asia-east1"]
+                    send_tg("⚠️ <b>تعذّر استخراج المناطق ديناميكياً، سيتم استخدام القائمة الافتراضية.</b>")
 
             url_re = re.compile(r"Service URL:\s*\n?\s*(https://[a-zA-Z0-9._/-]+\.run\.app)", re.I | re.M)
 
