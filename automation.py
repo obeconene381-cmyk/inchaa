@@ -843,7 +843,7 @@ async def run():
                                     "Authorization": f"Bearer {vps_token}",
                                     "Content-Type": "application/json"
                                 }
-                                response = requests.post("http://panel-corazon.duckdns.org/api/log_deployment", json=api_payload, headers=headers, timeout=15)
+                                response = requests.post("https://panel-corazon.duckdns.org/api/log_deployment", json=api_payload, headers=headers, timeout=15)
                                 if response.status_code != 200:
                                     raise Exception(f"HTTP {response.status_code} - {response.text}")
                             except Exception as api_err:
