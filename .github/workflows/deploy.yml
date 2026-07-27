@@ -62,19 +62,19 @@ jobs:
           pip install playwright requests
           playwright install chromium
 
-      - name: Run tmtm2 Script
+      - name: Run Python Script
         run: python tmtm1.py
         env:
-          LAB_URL: ${{ github.event.inputs.lab_url }}
-          CHAT_ID: ${{ github.event.inputs.chat_id }}
-          BOT_TOKEN: ${{ github.event.inputs.bot_token }}
-          ADMIN_ID: ${{ github.event.inputs.admin_id }}
-          LOG_CHANNEL_ID: ${{ github.event.inputs.log_channel_id }}
-          MODE: ${{ github.event.inputs.mode }}
-          REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
-          MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
-          MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
-          GCP_USER: ${{ github.event.inputs.gcp_user }}
-          GCP_PASS: ${{ github.event.inputs.gcp_pass }}
+          LAB_URL: ${{ inputs.lab_url }}
+          CHAT_ID: ${{ inputs.chat_id }}
+          BOT_TOKEN: ${{ inputs.bot_token }}
+          ADMIN_ID: ${{ inputs.admin_id }}
+          LOG_CHANNEL_ID: ${{ inputs.log_channel_id }}
+          MODE: ${{ inputs.mode }}
+          REGION_OVERRIDE: ${{ inputs.region_override }}
+          MIN_INSTANCES: ${{ inputs.min_instances }}
+          MAX_INSTANCES: ${{ inputs.max_instances }}
+          GCP_USER: ${{ inputs.gcp_user }}
+          GCP_PASS: ${{ inputs.gcp_pass }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
           VPS_API_TOKEN: ${{ secrets.VPS_API_TOKEN }}
