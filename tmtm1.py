@@ -169,20 +169,44 @@ async def click_captcha_checkbox(page):
     return False
 
 async def handle_try_again_later(page):
-    """كشف نافذة 'Try again later' والنقر على زر إعادة المحاولة/التحميل (Reload)"""
+    """كشف نافذة 'Try again later' والنقر الفعال على زر إعادة المحاولة عبر JS"""
     try:
-        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"]').first
+        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
         if await challenge_iframe.locator("body").count() > 0:
             iframe_text = await challenge_iframe.locator("body").inner_text()
             if "Try again later" in iframe_text or "automated queries" in iframe_text:
                 send_tg("🔄 <b>تم اكتشاف نافذة 'Try again later'! جاري النقر على زر إعادة المحاولة...</b>")
                 
-                # البحث عن زر إعادة التحديث داخل إطار الكابتشا (أيقونة السهم الدائري)
-                reload_btn = challenge_iframe.locator('#recaptcha-reload-button, .rc-button-reload, button[title*="Get a new challenge"]').first
-                if await reload_btn.is_visible(timeout=3000):
-                    await reload_btn.click(force=True)
-                    send_tg("✅ تم الضغط على زر إعادة المحاولة (Reload).")
-                    await asyncio.sleep(3)
+                # تنفيذ البحث والتنفيذ المباشر بالـ JS داخل الإطار
+                js_clicked = await challenge_iframe.locator("body").evaluate("""() => {
+                    const selectors = [
+                        '#recaptcha-reload-button',
+                        '.rc-button-reload',
+                        'button[title*="Get a new challenge"]',
+                        'button[title*="Reload"]',
+                        'button[title*="تحديث"]',
+                        '#recaptcha-audio-button',
+                        '.rc-footer button',
+                        '.rc-controls button',
+                        'button',
+                        '[role="button"]'
+                    ];
+                    for (let sel of selectors) {
+                        const els = document.querySelectorAll(sel);
+                        for (let el of els) {
+                            const rect = el.getBoundingClientRect();
+                            if (el && rect.width > 0 && rect.height > 0) {
+                                el.click();
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }""")
+                
+                if js_clicked:
+                    send_tg("✅ تم الضغط على زر إعادة المحاولة (Reload) بنجاح.")
+                    await asyncio.sleep(4)
                     return True
                 else:
                     send_tg("⚠️ ظهرت النافذة لكن تعذر تحديد موقع زر إعادة المحاولة.")
@@ -277,43 +301,47 @@ async def get_cloud_console_link(page):
 async def method_1_direct_click(page):
     send_tg("🎯 محاولة النقر المباشر على الشخص الأصفر...")
     try:
-        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"]').first
+        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
         
-        # 1. فحص أول قبل الضغط إذا كان الـ Try again later معروضاً من البداية
-        await handle_try_again_later(page)
+        for attempt in range(3):
+            # 1. فحص قبل الضغط
+            if await handle_try_again_later(page):
+                await asyncio.sleep(3)
 
-        audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
-        if await audio_btn.is_visible(timeout=5000):
-            await audio_btn.click(force=True) 
-            await asyncio.sleep(2)
-            send_tg("🔊 تم التحويل لتحدي الصوت")
+            audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
+            if await audio_btn.is_visible(timeout=3000):
+                await audio_btn.click(force=True) 
+                await asyncio.sleep(2)
+                send_tg("🔊 تم التحويل لتحدي الصوت")
 
-        # 2. فحص بعد الضغط على التحدي الصوتي في حال انبثقت النافذة
-        if await handle_try_again_later(page):
-            await asyncio.sleep(2)
-        
-        buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
-        
-        if await buster_btn.is_visible(timeout=5000):
-            await buster_btn.click(force=True)
-            send_tg("✅ تم الضغط على الشخص الأصفر بنجاح!")
-            await asyncio.sleep(8)
+            # 2. فحص بعد التحويل للصوت
+            if await handle_try_again_later(page):
+                await asyncio.sleep(3)
             
-            # 3. فحص بعد الضغط على Buster
-            await handle_try_again_later(page)
-
-            try:
-                verify_btn = challenge_iframe.locator('#recaptcha-verify-button')
-                is_disabled = await verify_btn.evaluate("node => node.disabled")
-                if not is_disabled and await verify_btn.is_visible():
-                    await verify_btn.evaluate("node => node.click()")
-            except Exception:
-                pass 
+            buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
+            
+            if await buster_btn.is_visible(timeout=3000):
+                await buster_btn.click(force=True)
+                send_tg("✅ تم الضغط على الشخص الأصفر بنجاح!")
+                await asyncio.sleep(8)
                 
-            return True
-        else:
-            send_tg("⚠️ لم يتم العثور على زر الشخص الأصفر، يبدو أن الإضافة لم تظهر.")
-            
+                # 3. فحص بعد الضغط على Buster
+                if await handle_try_again_later(page):
+                    await asyncio.sleep(3)
+                    continue
+
+                try:
+                    verify_btn = challenge_iframe.locator('#recaptcha-verify-button')
+                    is_disabled = await verify_btn.evaluate("node => node.disabled")
+                    if not is_disabled and await verify_btn.is_visible():
+                        await verify_btn.evaluate("node => node.click()")
+                except Exception:
+                    pass 
+                    
+                return True
+            else:
+                send_tg("⚠️ لم يتم العثور على زر الشخص الأصفر، يبدو أن الإضافة لم تظهر.")
+                
     except Exception as e:
         send_tg(f"❌ فشل أثناء محاولة النقر: {e}")
     return False
