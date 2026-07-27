@@ -172,7 +172,7 @@ async def ensure_challenge_open(page):
     """التحقق من أن نافذة التحدي مفتوحة وإعادتها فوراً إن أُغلقت"""
     bframe = page.locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
     if not await bframe.is_visible():
-        send_tg("🔄 النافذة انغلقت بعد التحديث، جاري فتح مربع الكابتشا مجدداً...")
+        send_tg("🔄 النافذة انغلقت، جاري فتح مربع الكابتشا مجدداً...")
         await click_captcha_checkbox(page)
         await asyncio.sleep(3)
 
@@ -317,19 +317,10 @@ async def method_1_direct_click(page):
             if await handle_try_again_later(page):
                 await asyncio.sleep(2)
 
-            audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
-            if await audio_btn.is_visible(timeout=3000):
-                await audio_btn.click(force=True) 
-                await asyncio.sleep(2)
-                send_tg("🔊 تم التحويل لتحدي الصوت")
-
-            # 2. فحص بعد التحويل للصوت
-            if await handle_try_again_later(page):
-                await asyncio.sleep(2)
-            
+            # 2. النقر المباشر على زر Buster (الشخص الأصفر) مباشرة دون تحويل للصوت
             buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
             
-            if await buster_btn.is_visible(timeout=3000):
+            if await buster_btn.is_visible(timeout=5000):
                 await buster_btn.click(force=True)
                 send_tg("✅ تم الضغط على الشخص الأصفر بنجاح!")
                 await asyncio.sleep(8)
