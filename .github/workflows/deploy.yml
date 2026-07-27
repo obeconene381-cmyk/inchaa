@@ -67,7 +67,7 @@ jobs:
           playwright install chromium
 
       - name: Run tmtm2 Script
-        run: python tmtm2.py
+        run: python tmtm1.py
         env:
           COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
           LAB_URL: ${{ github.event.inputs.lab_url }}
