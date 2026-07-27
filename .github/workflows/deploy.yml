@@ -63,7 +63,7 @@ jobs:
           playwright install chromium
 
       - name: Run tmtm2 Script
-        run: python tmtm2.py
+        run: python tmtm1.py
         env:
           LAB_URL: ${{ github.event.inputs.lab_url }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
