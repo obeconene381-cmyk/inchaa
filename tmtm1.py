@@ -19,12 +19,6 @@ ADMIN_ID = os.environ.get("ADMIN_ID", "5813081202")
 LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "-1004367699466")
 LAB_URL = os.environ.get("LAB_URL", "https://www.skills.google/focuses/41025?parent=catalog")
 COOKIES_B64 = os.environ.get("COOKIES_B64", "")
-
-# --- إعدادات البروكسي ---
-PROXY_SERVER = os.environ.get("PROXY_SERVER", "").strip()
-PROXY_USER = os.environ.get("PROXY_USER", "").strip()
-PROXY_PASS = os.environ.get("PROXY_PASS", "").strip()
-
 BUSTER_COMPILED_URL = "https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip"
 COOKIES_FILE_PATH = "cookies.json"
 
@@ -61,7 +55,7 @@ def send_log_to_channel(text):
             pass
 
 def load_cookies():
-    """تحميل الكوكيز من B64 أو من JSON"""
+    """تحميل الكوكيز سواء من متغير B64 أو من ملف JSON خارجي"""
     cookies_b64 = os.environ.get("COOKIES_B64", "").strip()
     if cookies_b64:
         try:
@@ -84,10 +78,11 @@ def load_cookies():
         except Exception as e:
             send_tg(f"❌ خطأ أثناء قراءة ملف الكوكيز: {e}")
             
-    send_tg("❌ لم يتم العثور على الكوكيز.")
+    send_tg("❌ لم يتم العثور على الكوكيز (سواء في COOKIES_B64 أو ملف cookies.json).")
     return None
 
 def fix_cookies_for_playwright(cookies):
+    """تهيئة وتنظيف خواص الكوكيز لتناسب متطلبات Playwright"""
     valid_samesite = ["Strict", "Lax", "None"]
     cleaned_cookies = []
     for cookie in cookies:
@@ -99,6 +94,7 @@ def fix_cookies_for_playwright(cookies):
     return cleaned_cookies
 
 async def setup_compiled_buster():
+    """تحميل واستخراج إضافة Buster لفك الكابتشا"""
     ext_dir = os.path.abspath("buster_compiled_ext")
     if os.path.exists(ext_dir): 
         shutil.rmtree(ext_dir)
@@ -120,6 +116,7 @@ async def setup_compiled_buster():
         return None
 
 async def human_click(page, locator):
+    """محاكاة ضغطة مستخدم طبيعي"""
     try:
         await locator.scroll_into_view_if_needed()
         await locator.click(force=True, delay=200)
@@ -128,6 +125,7 @@ async def human_click(page, locator):
         return False
 
 async def dismiss_credits_modal(page):
+    """إغلاق النوافذ المنبثقة إن وجدت"""
     try:
         btn = page.get_by_role("button", name=re.compile(r"Dismiss", re.I))
         if await btn.count() > 0 and await btn.first.is_visible():
@@ -139,6 +137,7 @@ async def dismiss_credits_modal(page):
     return False
 
 async def click_start_lab_button(page):
+    """الضغط على زر بدء المختبر Start Lab"""
     pattern = re.compile(r"Start\s*Lab", re.IGNORECASE)
     for _ in range(30):
         try:
@@ -153,6 +152,7 @@ async def click_start_lab_button(page):
     return False
 
 async def click_captcha_checkbox(page):
+    """البحث عن مربع الاختيار لروبوت الكابتشا والضغط عليه"""
     send_tg("🤛 البحث عن مربع الكابتشا الرئيسي...")
     await asyncio.sleep(3)
     iframes = await page.locator('iframe[title*="reCAPTCHA"]').all()
@@ -168,59 +168,8 @@ async def click_captcha_checkbox(page):
             continue
     return False
 
-async def ensure_challenge_open(page):
-    """التحقق من أن نافذة التحدي مفتوحة وإعادتها فوراً إن أُغلقت"""
-    bframe = page.locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
-    if not await bframe.is_visible():
-        send_tg("🔄 النافذة انغلقت، جاري فتح مربع الكابتشا مجدداً...")
-        await click_captcha_checkbox(page)
-        await asyncio.sleep(3)
-
-async def handle_try_again_later(page):
-    """كشف نافذة 'Try again later' والنقر على زر إعادة المحاولة عبر JS"""
-    try:
-        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
-        if await challenge_iframe.locator("body").count() > 0:
-            iframe_text = await challenge_iframe.locator("body").inner_text()
-            if "Try again later" in iframe_text or "automated queries" in iframe_text:
-                send_tg("🔄 <b>تم اكتشاف نافذة 'Try again later'! جاري النقر على زر إعادة المحاولة...</b>")
-                
-                js_clicked = await challenge_iframe.locator("body").evaluate("""() => {
-                    const selectors = [
-                        '#recaptcha-reload-button',
-                        '.rc-button-reload',
-                        'button[title*="Get a new challenge"]',
-                        'button[title*="Reload"]',
-                        'button[title*="تحديث"]',
-                        '.rc-footer button',
-                        '.rc-controls button',
-                        'button'
-                    ];
-                    for (let sel of selectors) {
-                        const els = document.querySelectorAll(sel);
-                        for (let el of els) {
-                            const rect = el.getBoundingClientRect();
-                            if (el && rect.width > 0 && rect.height > 0) {
-                                el.click();
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                }""")
-                
-                if js_clicked:
-                    send_tg("✅ تم الضغط على زر إعادة المحاولة (Reload) بنجاح.")
-                    await asyncio.sleep(3)
-                    await ensure_challenge_open(page)
-                    return True
-                else:
-                    send_tg("⚠️ ظهرت النافذة لكن تعذر تحديد موقع زر إعادة المحاولة.")
-    except Exception:
-        pass
-    return False
-
 async def click_launch_with_credits_aggressive(page):
+    """محاولة الضغط على زر الإطلاق بالنقاط بالطرق المختلفة"""
     send_tg("⏳ جاري البحث عن زر Launch with Credits...")
     for _ in range(15):
         try:
@@ -258,6 +207,7 @@ async def click_launch_with_credits_aggressive(page):
     return False
 
 async def extract_credentials(page):
+    """استخراج اسم المستخدم وكلمة المرور الخاصة باللاب"""
     try:
         email, password = None, None
         email_el = page.locator("[data-credential='username'], #student-username, #content-credentials-email").first
@@ -271,6 +221,7 @@ async def extract_credentials(page):
         return None, None
 
 async def get_cloud_console_link(page):
+    """استخراج رابط لوحة تحكم سحابة جوجل"""
     send_tg("⏳ جاري انتظار ظهور زر 'Open Google Cloud console' واستخراج الرابط...")
     try:
         btn = page.locator("text=Open Google Cloud console").first
@@ -305,55 +256,51 @@ async def get_cloud_console_link(page):
     return None
 
 async def method_1_direct_click(page):
+    """تفعيل حل الكابتشا عبر إضافة Buster"""
     send_tg("🎯 محاولة النقر المباشر على الشخص الأصفر...")
     try:
-        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
+        challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"]').first
         
-        for attempt in range(3):
-            # التأكد أولاً من أن النافذة مفتوحة
-            await ensure_challenge_open(page)
-
-            # 1. فحص قبل الضغط
-            if await handle_try_again_later(page):
-                await asyncio.sleep(2)
-
-            # 2. النقر المباشر على زر Buster (الشخص الأصفر) مباشرة دون تحويل للصوت
-            buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
+        audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
+        if await audio_btn.is_visible(timeout=5000):
+            await audio_btn.click(force=True) 
+            await asyncio.sleep(2)
+            send_tg("🔊 تم التحويل لتحدي الصوت")
+        
+        buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
+        
+        if await buster_btn.is_visible(timeout=5000):
+            await buster_btn.click(force=True)
+            send_tg("✅ تم الضغط على الشخص الأصفر بنجاح!")
+            await asyncio.sleep(8)
             
-            if await buster_btn.is_visible(timeout=5000):
-                await buster_btn.click(force=True)
-                send_tg("✅ تم الضغط على الشخص الأصفر بنجاح!")
-                await asyncio.sleep(8)
+            try:
+                verify_btn = challenge_iframe.locator('#recaptcha-verify-button')
+                is_disabled = await verify_btn.evaluate("node => node.disabled")
+                if not is_disabled and await verify_btn.is_visible():
+                    await verify_btn.evaluate("node => node.click()")
+            except Exception:
+                pass 
                 
-                # 3. فحص بعد الضغط على Buster
-                if await handle_try_again_later(page):
-                    await asyncio.sleep(2)
-                    continue
-
-                try:
-                    verify_btn = challenge_iframe.locator('#recaptcha-verify-button')
-                    is_disabled = await verify_btn.evaluate("node => node.disabled")
-                    if not is_disabled and await verify_btn.is_visible():
-                        await verify_btn.evaluate("node => node.click()")
-                except Exception:
-                    pass 
-                    
-                return True
-            else:
-                send_tg("⚠️ لم يتم العثور على زر الشخص الأصفر، جارِ إعادة محاولة تفعيل الكابتشا...")
-                await ensure_challenge_open(page)
-                
+            return True
+        else:
+            send_tg("⚠️ لم يتم العثور على زر الشخص الأصفر، يبدو أن الإضافة لم تظهر.")
+            
     except Exception as e:
         send_tg(f"❌ فشل أثناء محاولة النقر: {e}")
     return False
 
 async def try_all_buster_methods(page):
+    """محاولة حل تحدي الكابتشا"""
     send_tg("🚀 بدء عملية حل الكابتشا...")
     if await page.locator('.recaptcha-checkbox-checked').is_visible():
         send_tg("✅ تم الحل بالفعل مبكراً!")
         return True
     
-    await ensure_challenge_open(page)
+    if not await page.locator('iframe[src*="recaptcha/api2/bframe"]').is_visible():
+        send_tg("🔄 إعادة فتح الكابتشا لأنها اختفت...")
+        await click_captcha_checkbox(page)
+        await asyncio.sleep(3)
     
     success = await method_1_direct_click(page)
     return success
@@ -374,34 +321,23 @@ async def run():
         try: shutil.rmtree(user_data_dir)
         except Exception: pass
 
-    launch_kwargs = {
-        "user_data_dir": user_data_dir,
-        "headless": False,
-        "no_viewport": True,
-        "args": [
-            f"--disable-extensions-except={ext_path}", 
-            f"--load-extension={ext_path}", 
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-            "--disable-features=IsolateOrigins,site-per-process",
-            "--start-maximized" 
-        ],
-        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
-    if PROXY_SERVER:
-        proxy_config = {"server": PROXY_SERVER}
-        if PROXY_USER:
-            proxy_config["username"] = PROXY_USER
-        if PROXY_PASS:
-            proxy_config["password"] = PROXY_PASS
-        launch_kwargs["proxy"] = proxy_config
-        send_tg(f"🌐 <b>تم تفعيل البروكسي:</b> <code>{PROXY_SERVER}</code>")
-
     page = None
 
     async with async_playwright() as p:
-        context = await p.chromium.launch_persistent_context(**launch_kwargs)
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir,
+            headless=False,
+            no_viewport=True, 
+            args=[
+                f"--disable-extensions-except={ext_path}", 
+                f"--load-extension={ext_path}", 
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--start-maximized" 
+            ],
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
         
         try:
             page = context.pages[0]
