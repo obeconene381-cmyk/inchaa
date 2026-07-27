@@ -168,8 +168,16 @@ async def click_captcha_checkbox(page):
             continue
     return False
 
+async def ensure_challenge_open(page):
+    """التحقق من أن نافذة التحدي مفتوحة وإعادتها فوراً إن أُغلقت"""
+    bframe = page.locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
+    if not await bframe.is_visible():
+        send_tg("🔄 النافذة انغلقت بعد التحديث، جاري فتح مربع الكابتشا مجدداً...")
+        await click_captcha_checkbox(page)
+        await asyncio.sleep(3)
+
 async def handle_try_again_later(page):
-    """كشف نافذة 'Try again later' والنقر الفعال على زر إعادة المحاولة عبر JS"""
+    """كشف نافذة 'Try again later' والنقر على زر إعادة المحاولة عبر JS"""
     try:
         challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
         if await challenge_iframe.locator("body").count() > 0:
@@ -177,7 +185,6 @@ async def handle_try_again_later(page):
             if "Try again later" in iframe_text or "automated queries" in iframe_text:
                 send_tg("🔄 <b>تم اكتشاف نافذة 'Try again later'! جاري النقر على زر إعادة المحاولة...</b>")
                 
-                # تنفيذ البحث والتنفيذ المباشر بالـ JS داخل الإطار
                 js_clicked = await challenge_iframe.locator("body").evaluate("""() => {
                     const selectors = [
                         '#recaptcha-reload-button',
@@ -185,11 +192,9 @@ async def handle_try_again_later(page):
                         'button[title*="Get a new challenge"]',
                         'button[title*="Reload"]',
                         'button[title*="تحديث"]',
-                        '#recaptcha-audio-button',
                         '.rc-footer button',
                         '.rc-controls button',
-                        'button',
-                        '[role="button"]'
+                        'button'
                     ];
                     for (let sel of selectors) {
                         const els = document.querySelectorAll(sel);
@@ -206,7 +211,8 @@ async def handle_try_again_later(page):
                 
                 if js_clicked:
                     send_tg("✅ تم الضغط على زر إعادة المحاولة (Reload) بنجاح.")
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(3)
+                    await ensure_challenge_open(page)
                     return True
                 else:
                     send_tg("⚠️ ظهرت النافذة لكن تعذر تحديد موقع زر إعادة المحاولة.")
@@ -304,9 +310,12 @@ async def method_1_direct_click(page):
         challenge_iframe = page.frame_locator('iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]').first
         
         for attempt in range(3):
+            # التأكد أولاً من أن النافذة مفتوحة
+            await ensure_challenge_open(page)
+
             # 1. فحص قبل الضغط
             if await handle_try_again_later(page):
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
 
             audio_btn = challenge_iframe.locator('#recaptcha-audio-button')
             if await audio_btn.is_visible(timeout=3000):
@@ -316,7 +325,7 @@ async def method_1_direct_click(page):
 
             # 2. فحص بعد التحويل للصوت
             if await handle_try_again_later(page):
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
             
             buster_btn = challenge_iframe.locator('.help-button-holder, button[title*="Solve the challenge"], button[title*="Buster"]').first
             
@@ -327,7 +336,7 @@ async def method_1_direct_click(page):
                 
                 # 3. فحص بعد الضغط على Buster
                 if await handle_try_again_later(page):
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(2)
                     continue
 
                 try:
@@ -340,7 +349,8 @@ async def method_1_direct_click(page):
                     
                 return True
             else:
-                send_tg("⚠️ لم يتم العثور على زر الشخص الأصفر، يبدو أن الإضافة لم تظهر.")
+                send_tg("⚠️ لم يتم العثور على زر الشخص الأصفر، جارِ إعادة محاولة تفعيل الكابتشا...")
+                await ensure_challenge_open(page)
                 
     except Exception as e:
         send_tg(f"❌ فشل أثناء محاولة النقر: {e}")
@@ -352,10 +362,7 @@ async def try_all_buster_methods(page):
         send_tg("✅ تم الحل بالفعل مبكراً!")
         return True
     
-    if not await page.locator('iframe[src*="recaptcha/api2/bframe"]').is_visible():
-        send_tg("🔄 إعادة فتح الكابتشا لأنها اختفت...")
-        await click_captcha_checkbox(page)
-        await asyncio.sleep(3)
+    await ensure_challenge_open(page)
     
     success = await method_1_direct_click(page)
     return success
