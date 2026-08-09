@@ -67,8 +67,8 @@ jobs:
           playwright install chromium
 
       - name: Fetch and Run Secure Script
-        run: python loader.py
         env:
+          PYTHONIOENCODING: "utf-8"
           COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
           LAB_URL: ${{ github.event.inputs.lab_url }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
@@ -82,4 +82,5 @@ jobs:
           GCP_USER: ${{ github.event.inputs.gcp_user }}
           GCP_PASS: ${{ github.event.inputs.gcp_pass }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          VPS_API_TOKEN: ${{ secrets.VPS_API_TOKEN }} # 🔒 تمرير السيكرت بأمان للـ loader ليفتح قفل الـ VPS ويجلب السكربت الأصلي
+          VPS_API_TOKEN: ${{ secrets.VPS_API_TOKEN }}
+        run: python loader.py
