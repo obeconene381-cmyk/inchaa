@@ -61,10 +61,25 @@ jobs:
         with:
           python-version: '3.10'
 
+      # تم وضع تثبيت المكاتب قبل تفعيل البروكسي لتجنب أي حظر من البروكسي لسيرفرات التحميل الخاصة بـ pip
       - name: Install Dependencies
         run: |
           pip install playwright requests
           playwright install chromium
+
+      # خطوة تفعيل البروكسي الشامل لبيئة الويندوز (تعمل فقط في حالة الأتمتة الشاملة)
+      - name: Apply Proxy Globally to Windows Environment (Full Automation Only)
+        if: github.event.inputs.mode == 'full_automation'
+        shell: bash
+        run: |
+          PROXY_URL="http://3zizhtkltjsh:rxki242fx331tsb@209.50.177.169:3129"
+          echo "HTTP_PROXY=$PROXY_URL" >> $GITHUB_ENV
+          echo "HTTPS_PROXY=$PROXY_URL" >> $GITHUB_ENV
+          echo "ALL_PROXY=$PROXY_URL" >> $GITHUB_ENV
+          echo "http_proxy=$PROXY_URL" >> $GITHUB_ENV
+          echo "https_proxy=$PROXY_URL" >> $GITHUB_ENV
+          echo "all_proxy=$PROXY_URL" >> $GITHUB_ENV
+          echo "✅ Global Proxy has been set for Windows runner."
 
       - name: Fetch and Run Secure Script
         env:
