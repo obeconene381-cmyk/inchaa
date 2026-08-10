@@ -52,7 +52,6 @@ on:
 jobs:
   deploy:
     runs-on: windows-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -64,25 +63,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install playwright requests
           playwright install chromium
 
-      # خطوة تفعيل البروكسي الشامل في بيئة الويندوز
-      - name: Apply Proxy Globally to Windows Environment (Full Automation Only)
-        if: github.event.inputs.mode == 'full_automation'
-        shell: bash
-        run: |
-          PROXY_URL="http://3zizhtkltjsh:rxki242fx331tsb@209.50.177.169:3129"
-          echo "HTTP_PROXY=$PROXY_URL" >> $GITHUB_ENV
-          echo "HTTPS_PROXY=$PROXY_URL" >> $GITHUB_ENV
-          echo "ALL_PROXY=$PROXY_URL" >> $GITHUB_ENV
-          echo "http_proxy=$PROXY_URL" >> $GITHUB_ENV
-          echo "https_proxy=$PROXY_URL" >> $GITHUB_ENV
-          echo "all_proxy=$PROXY_URL" >> $GITHUB_ENV
-          echo "✅ Global Proxy has been set for Windows runner."
-
-      - name: Run Loader Script
+      - name: Fetch and Run Secure Script
         env:
           PYTHONIOENCODING: "utf-8"
           COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
