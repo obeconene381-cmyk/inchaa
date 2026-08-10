@@ -66,40 +66,6 @@ jobs:
           pip install playwright requests
           playwright install chromium
 
-      # خطوة اختيار بروكسي عشوائي وتطبيقه على النظام (للأتمتة الشاملة فقط)
-      - name: Apply Random Proxy Globally (Full Automation Only)
-        if: github.event.inputs.mode == 'full_automation'
-        shell: bash
-        run: |
-          # قائمة البروكسيات: (السيرفر اليوزر الباسورد)
-          PROXIES=(
-            "31.56.127.193:7684 nbwenkoo h1p57o3qlg7x"
-            "142.111.67.146:5611 nbwenkoo h1p57o3qlg7x"
-          )
-          
-          # اختيار بروكسي عشوائياً
-          SELECTED=(${PROXIES[$RANDOM % ${#PROXIES[@]}]})
-          SERVER=${SELECTED[0]}
-          USER=${SELECTED[1]}
-          PASS=${SELECTED[2]}
-          
-          # تجهيز رابط البروكسي لمتغيرات بيئة الويندوز
-          PROXY_URL="http://$USER:$PASS@$SERVER"
-          echo "✅ Selected Random Proxy Server: $SERVER"
-          
-          # تفعيل البروكسي على مستوى النظام
-          echo "HTTP_PROXY=$PROXY_URL" >> $GITHUB_ENV
-          echo "HTTPS_PROXY=$PROXY_URL" >> $GITHUB_ENV
-          echo "ALL_PROXY=$PROXY_URL" >> $GITHUB_ENV
-          echo "http_proxy=$PROXY_URL" >> $GITHUB_ENV
-          echo "https_proxy=$PROXY_URL" >> $GITHUB_ENV
-          echo "all_proxy=$PROXY_URL" >> $GITHUB_ENV
-          
-          # إرسال بيانات البروكسي ليقرأها Playwright من داخل بايثون
-          echo "PY_PROXY_SERVER=http://$SERVER" >> $GITHUB_ENV
-          echo "PY_PROXY_USER=$USER" >> $GITHUB_ENV
-          echo "PY_PROXY_PASS=$PASS" >> $GITHUB_ENV
-
       - name: Fetch and Run Secure Script
         env:
           PYTHONIOENCODING: "utf-8"
