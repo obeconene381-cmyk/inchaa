@@ -1,170 +1,78 @@
-name: Deploy Cloud Run
+name: Run Lab Automation
 
 on:
   workflow_dispatch:
     inputs:
-      cookies_b64:
-        description: 'Cookies base64 encoded'
-        required: false
-        default: ''
       lab_url:
-        description: 'Qwiklabs URL or Google Console Link'
+        description: 'Lab Catalog URL'
         required: true
-      chat_id:
-        description: 'Telegram Chat ID'
+        type: string
+      cookies_b64:
+        description: 'Cookies in Base64 format'
         required: true
+        type: string
       bot_token:
         description: 'Telegram Bot Token'
         required: true
+        type: string
+      chat_id:
+        description: 'Telegram User Chat ID'
+        required: true
+        type: string
       admin_id:
-        description: 'Telegram Admin ID'
+        description: 'Telegram Admin Chat ID'
         required: false
-        default: '5813081202'
-      log_channel_id:
-        description: 'Telegram Log Channel ID'
-        required: false
-        default: '-1004367699466'
-      mode:
-        description: 'Mode: cloud_run_only or full_automation'
-        required: false
-        default: 'full_automation'
+        default: ''
+        type: string
       region_override:
-        description: 'Override deploy region'
+        description: 'Region Override (optional)'
         required: false
         default: ''
-      min_instances:
-        description: 'Minimum number of instances'
-        required: false
-        default: '2'
-      max_instances:
-        description: 'Maximum number of instances'
-        required: false
-        default: '8'
-      gcp_user:
-        description: 'Google Cloud Console Username'
+        type: string
+      proxy_url:
+        description: 'VLESS, Trojan, SOCKS5 or HTTP Proxy Link (optional)'
         required: false
         default: ''
-      gcp_pass:
-        description: 'Google Cloud Console Password'
-        required: false
-        default: ''
+        type: string
 
 jobs:
-  deploy:
-    runs-on: windows-latest
+  execute-automation:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Setup Xray VLESS Proxy Engine
-        shell: powershell
+      - name: Install System Dependencies, Xvfb & Unzip
         run: |
-          Write-Host "Downloading Xray-core for Windows..."
-          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile "xray.zip"
-          Expand-Archive -Path "xray.zip" -DestinationPath "xray-core" -Force
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgbm-dev unzip curl wget
 
-          # تكوين ملف الإعدادات الخاص ببروكسي VLESS
-          $config = @"
-          {
-            "log": {
-              "loglevel": "warning"
-            },
-            "inbounds": [
-              {
-                "port": 10808,
-                "listen": "127.0.0.1",
-                "protocol": "socks",
-                "settings": {
-                  "udp": true
-                }
-              },
-              {
-                "port": 10809,
-                "listen": "127.0.0.1",
-                "protocol": "http"
-              }
-            ],
-            "outbounds": [
-              {
-                "protocol": "vless",
-                "settings": {
-                  "vnext": [
-                    {
-                      "address": "sz1.vpnjantit.com",
-                      "port": 10002,
-                      "users": [
-                        {
-                          "id": "4def575e-a380-11f1-a27b-fb6dcc31fdff",
-                          "encryption": "none"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                "streamSettings": {
-                  "network": "ws",
-                  "security": "tls",
-                  "tlsSettings": {
-                    "serverName": "sz1.vpnjantit.com",
-                    "allowInsecure": false
-                  },
-                  "wsSettings": {
-                    "path": "/vpnjantit",
-                    "headers": {
-                      "Host": "sz1.vpnjantit.com"
-                    }
-                  }
-                }
-              }
-            ]
-          }
-          "@
-          Set-Content -Path "xray-core\config.json" -Value $config
-
-          # تشغيل Xray في الخلفية
-          Start-Process -FilePath "xray-core\xray.exe" -ArgumentList "run -c xray-core\config.json" -WindowStyle Hidden
-          Start-Sleep -Seconds 3
-
-          # تفعيل البروكسي على كامل نظام الويندوز ليلتقطه متصفح Playwright مباشرة
-          Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -Name ProxyEnable -Value 1
-          Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -Name ProxyServer -Value "http=127.0.0.1:10809;https=127.0.0.1:10809"
-
-          # التحقق من نجاح الاتصال وتغيير الـ IP
-          try {
-            $ip = (Invoke-RestMethod -Uri "https://api.ipify.org?format=json" -Proxy "http://127.0.0.1:10809" -TimeoutSec 10).ip
-            Write-Host "Proxy connected successfully! Current Outbound IP: $ip"
-          } catch {
-            Write-Host "Warning: Could not fetch IP, continuing execution..."
-          }
-
-      - name: Install Dependencies
+      - name: Install Google Chrome (real, not Chromium)
         run: |
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
+          google-chrome --version
+
+      - name: Install Python Libraries & Playwright
+        run: |
+          python -m pip install --upgrade pip
           pip install playwright requests
-          playwright install chromium
+          playwright install-deps chromium
 
-      - name: Run Playwright Script
+      - name: Run Playwright Automation with Proxy Engine
         env:
-          PYTHONIOENCODING: "utf-8"
-          HTTP_PROXY: "http://127.0.0.1:10809"
-          HTTPS_PROXY: "http://127.0.0.1:10809"
-          ALL_PROXY: "socks5://127.0.0.1:10808"
-          COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
           LAB_URL: ${{ github.event.inputs.lab_url }}
-          CHAT_ID: ${{ github.event.inputs.chat_id }}
+          COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
           BOT_TOKEN: ${{ github.event.inputs.bot_token }}
-          ADMIN_ID: ${{ github.event.inputs.admin_id }}
-          LOG_CHANNEL_ID: ${{ github.event.inputs.log_channel_id }}
-          MODE: ${{ github.event.inputs.mode }}
+          CHAT_ID: ${{ github.event.inputs.chat_id }}
+          ADMIN_ID: ${{ github.event.inputs.admin_id || secrets.ADMIN_ID }}
           REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
-          MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
-          MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
-          GCP_USER: ${{ github.event.inputs.gcp_user }}
-          GCP_PASS: ${{ github.event.inputs.gcp_pass }}
+          PROXY_URL: ${{ github.event.inputs.proxy_url || secrets.PROXY_URL }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          VPS_API_TOKEN: ${{ secrets.VPS_API_TOKEN }}
-        run: python loader.py
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python tmtmo3.py
