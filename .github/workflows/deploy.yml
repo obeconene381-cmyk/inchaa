@@ -29,11 +29,6 @@ on:
         required: false
         default: ''
         type: string
-      proxy_url:
-        description: 'VLESS, Trojan, SOCKS5 or HTTP Proxy Link (optional)'
-        required: false
-        default: ''
-        type: string
 
 jobs:
   execute-automation:
@@ -65,6 +60,69 @@ jobs:
           pip install playwright requests
           playwright install-deps chromium
 
+      - name: Setup & Start Xray (VLESS proxy)
+        run: |
+          # تحميل Xray
+          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          unzip -q Xray-linux-64.zip -d xray_bin
+          chmod +x xray_bin/xray
+          # إنشاء config من رابط VLESS
+          cat > xray_bin/config.json << 'XRAYEOF'
+          {
+            "inbounds": [
+              {
+                "port": 10808,
+                "protocol": "socks",
+                "settings": {"udp": true}
+              },
+              {
+                "port": 10809,
+                "protocol": "http",
+                "settings": {}
+              }
+            ],
+            "outbounds": [
+              {
+                "protocol": "vless",
+                "settings": {
+                  "vnext": [
+                    {
+                      "address": "sz1.vpnjantit.com",
+                      "port": 10004,
+                      "users": [
+                        {
+                          "id": "4def575e-a380-11f1-a27b-fb6dcc31fdff",
+                          "encryption": "none",
+                          "flow": ""
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "streamSettings": {
+                  "network": "ws",
+                  "security": "none",
+                  "wsSettings": {
+                    "path": "/vpnjantit",
+                    "headers": {"Host": "sz1.vpnjantit.com"}
+                  }
+                }
+              }
+            ]
+          }
+          XRAYEOF
+          # تشغيل Xray كـ background process
+          nohup ./xray_bin/xray run -config xray_bin/config.json > xray.log 2>&1 &
+          sleep 2
+          # التحقق أنه يعمل
+          if pgrep -x xray > /dev/null; then
+            echo "✅ Xray يعمل على SOCKS5 port 10808"
+          else
+            echo "❌ Xray فشل في التشغيل"
+            cat xray.log
+            exit 1
+          fi
+
       - name: Run Playwright Automation with Proxy Engine
         env:
           LAB_URL: ${{ github.event.inputs.lab_url }}
@@ -73,7 +131,6 @@ jobs:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
           ADMIN_ID: ${{ github.event.inputs.admin_id || secrets.ADMIN_ID }}
           REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
-          PROXY_URL: ${{ github.event.inputs.proxy_url || secrets.PROXY_URL }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python tmtmo3.py
