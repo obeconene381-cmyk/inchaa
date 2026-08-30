@@ -1,73 +1,79 @@
-name: Run Lab Automation
+name: Deploy Cloud Run
 
 on:
   workflow_dispatch:
     inputs:
-      lab_url:
-        description: 'Lab Catalog URL'
-        required: true
-        type: string
       cookies_b64:
-        description: 'Cookies in Base64 format'
+        description: 'Cookies base64 encoded'
+        required: false
+        default: ''
+      lab_url:
+        description: 'Qwiklabs URL or Google Console Link'
         required: true
-        type: string
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
       bot_token:
         description: 'Telegram Bot Token'
         required: true
-        type: string
-      chat_id:
-        description: 'Telegram User Chat ID'
-        required: true
-        type: string
       admin_id:
-        description: 'Telegram Admin Chat ID'
+        description: 'Telegram Admin ID'
         required: false
-        default: ''
-        type: string
+        default: '5813081202'
+      log_channel_id:
+        description: 'Telegram Log Channel ID'
+        required: false
+        default: '-1004367699466'
+      mode:
+        description: 'Mode: cloud_run_only or full_automation'
+        required: false
+        default: 'full_automation'
       region_override:
-        description: 'Region Override (optional)'
+        description: 'Override deploy region'
         required: false
         default: ''
-        type: string
+      min_instances:
+        description: 'Minimum number of instances'
+        required: false
+        default: '2'
+      max_instances:
+        description: 'Maximum number of instances'
+        required: false
+        default: '8'
+      gcp_user:
+        description: 'Google Cloud Console Username'
+        required: false
+        default: ''
+      gcp_pass:
+        description: 'Google Cloud Console Password'
+        required: false
+        default: ''
 
 jobs:
-  execute-automation:
-    runs-on: ubuntu-latest
+  deploy:
+    runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Install System Dependencies, Xvfb & Unzip
+      - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libgbm-dev unzip curl wget
-
-      - name: Install Google Chrome (real, not Chromium)
-        run: |
-          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
-          google-chrome --version
-
-      - name: Install Python Libraries & Playwright
-        run: |
-          python -m pip install --upgrade pip
           pip install playwright requests
-          playwright install-deps chromium
+          playwright install chromium
 
       - name: Setup & Start Xray (VLESS proxy)
         run: |
-          # تحميل Xray
-          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          unzip -q Xray-linux-64.zip -d xray_bin
-          chmod +x xray_bin/xray
-          # إنشاء config من رابط VLESS
-          cat > xray_bin/config.json << 'XRAYEOF'
+          # تحميل Xray لـ Windows
+          curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip
+          Expand-Archive -Path xray.zip -DestinationPath xray_bin -Force
+          # إنشاء config.json من رابط VLESS
+          $config = @'
           {
             "inbounds": [
               {
@@ -110,30 +116,38 @@ jobs:
               }
             ]
           }
-          XRAYEOF
+          '@
+          $config | Out-File -FilePath xray_bin\config.json -Encoding utf8
           # تشغيل Xray كـ background process
-          nohup ./xray_bin/xray run -config xray_bin/config.json > xray.log 2>&1 &
-          sleep 2
+          Start-Process -FilePath "xray_bin\xray.exe" -ArgumentList "run","-config","xray_bin\config.json" -WindowStyle Hidden
+          Start-Sleep -Seconds 3
           # التحقق أنه يعمل
-          if pgrep -x xray > /dev/null; then
-            echo "✅ Xray يعمل على SOCKS5 port 10808"
-          else
-            echo "❌ Xray فشل في التشغيل"
-            cat xray.log
+          $xrayProc = Get-Process -Name "xray" -ErrorAction SilentlyContinue
+          if ($xrayProc) {
+            Write-Host "Xray يعمل على SOCKS5 port 10808"
+          } else {
+            Write-Host "Xray فشل في التشغيل"
             exit 1
-          fi
+          }
 
-      - name: Run Playwright Automation with Proxy Engine
+      - name: Fetch and Run Secure Script
         env:
-          LAB_URL: ${{ github.event.inputs.lab_url }}
+          PYTHONIOENCODING: "utf-8"
           COOKIES_B64: ${{ github.event.inputs.cookies_b64 }}
-          BOT_TOKEN: ${{ github.event.inputs.bot_token }}
+          LAB_URL: ${{ github.event.inputs.lab_url }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
-          ADMIN_ID: ${{ github.event.inputs.admin_id || secrets.ADMIN_ID }}
+          BOT_TOKEN: ${{ github.event.inputs.bot_token }}
+          ADMIN_ID: ${{ github.event.inputs.admin_id }}
+          LOG_CHANNEL_ID: ${{ github.event.inputs.log_channel_id }}
+          MODE: ${{ github.event.inputs.mode }}
           REGION_OVERRIDE: ${{ github.event.inputs.region_override }}
+          MIN_INSTANCES: ${{ github.event.inputs.min_instances }}
+          MAX_INSTANCES: ${{ github.event.inputs.max_instances }}
+          GCP_USER: ${{ github.event.inputs.gcp_user }}
+          GCP_PASS: ${{ github.event.inputs.gcp_pass }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python tmtmo3.py
+          VPS_API_TOKEN: ${{ secrets.VPS_API_TOKEN }}
+        run: python loader.py
 
       - name: Upload screenshots on failure
         if: failure()
